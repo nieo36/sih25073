@@ -1,0 +1,14 @@
+const express = require("express");
+const { corsConfig } = require("./src/config/cors.config.js");
+const { requestLogger } = require("./src/middleware/requestLogger.js");
+const { globalErrorHandler } = require("./src/middleware/errorHandler.js");
+const { rateLimiter } = require("./src/middleware/rateLimiter.js");
+const { api } = require("./src/routes/api");
+const app = express();
+app.use(requestLogger);
+app.use(corsConfig());
+app.use(express.json());
+app.use(rateLimiter());
+app.use("/api/v1", api);
+app.use(globalErrorHandler);
+module.exports = app;

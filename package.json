@@ -1,0 +1,24 @@
+{
+  "name": "sih25073",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "npm start --prefix backend",
+    "client:dev": "npm run dev --prefix client",
+    "client:build": "npm run build --prefix client",
+    "client:preview": "npm run preview --prefix client"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nieo36/sih25073.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/nieo36/sih25073/issues"
+  },
+  "homepage": "https://github.com/nieo36/sih25073#readme",
+  "description": ""
+}
