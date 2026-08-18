@@ -16,6 +16,10 @@ function getAppUrl() {
     return process.env.APP_URL ?? "http://localhost:2000";
 }
 
+function getClientUrl() {
+    return process.env.CLIENT_URL ?? "http://localhost:3000";
+}
+
 function getGoogleClient() {
     const redirectUri = process.env.GOOGLE_REDIRECT_URI;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -115,11 +119,11 @@ async function verifyEmailHandler(req, res) {
             });
         }
         if (profile.isEmailVerified) {
-            return res.json({ message: "Email is already verified" });
+            return res.redirect(`${getClientUrl()}/login?verified=true&already=true`);
         }
         profile.isEmailVerified = true;
         await profile.save();
-        return res.status(200).redirect(`${getAppUrl()}/login`);
+        return res.status(200).redirect(`${getClientUrl()}/login?verified=true`);
     } catch (err) {
         console.error("Jwt error:", err);
         return res.status(500).json({
@@ -487,12 +491,19 @@ async function googleAuthCallbackHandler(req, res) {
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
+        // If request is from browser navigation (OAuth redirect), redirect directly to client callback page
+        if (!req.xhr && req.headers.accept && req.headers.accept.includes("text/html")) {
+            const redirectUrl = `${getClientUrl()}/auth/callback?token=${accessToken}&email=${encodeURIComponent(profile.email)}&name=${encodeURIComponent(profile.name || '')}&role=${profile.role}&id=${profile.id}&isEmailVerified=${profile.isEmailVerified}`;
+            return res.redirect(redirectUrl);
+        }
+
         return res.status(200).json({
             message: "Google login success",
             accessToken: accessToken,
             user: {
                 id: profile.id,
                 email: profile.email,
+                name: profile.name,
                 role: profile.role,
                 isEmailVerified: profile.isEmailVerified,
             },

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Activity, 
   Award, 
@@ -9,11 +9,16 @@ import {
   LayoutDashboard, 
   LogOut, 
   ShieldAlert, 
-  User 
+  User,
+  LogIn,
+  ShieldCheck
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export const Navbar: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, isAuthenticated, logout } = useAuth();
 
   const navLinks = [
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -23,6 +28,12 @@ export const Navbar: React.FC = () => {
     { to: '/passport', label: 'Sports Passport', icon: FileCheck },
     { to: '/recruiter', label: 'Recruiter Hub', icon: ShieldAlert },
   ];
+
+  const handleLogout = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    await logout();
+    navigate('/login');
+  };
 
   return (
     <nav style={{
@@ -100,29 +111,92 @@ export const Navbar: React.FC = () => {
 
         {/* User Account / Auth Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <Link
-            to="/login"
-            className="btn btn-secondary"
-            style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem' }}
-          >
-            <User size={15} />
-            <span>Aarav S.</span>
-          </Link>
-          <Link
-            to="/login"
-            title="Logout"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '0.5rem',
-              color: 'var(--text-muted)',
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--border-color)',
-            }}
-          >
-            <LogOut size={16} />
-          </Link>
+          {isAuthenticated && user ? (
+            <>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.45rem 0.85rem',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  color: '#fff',
+                }}
+              >
+                <div
+                  style={{
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '50%',
+                    background: 'var(--gradient-neon)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    color: '#fff',
+                  }}
+                >
+                  {user.name ? user.name.charAt(0).toUpperCase() : <User size={13} />}
+                </div>
+                <span>{user.name || user.email.split('@')[0]}</span>
+                {user.twoFactorEnabled && (
+                  <span title="2FA Active" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    <ShieldCheck size={14} color="var(--accent-cyan)" />
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                title="Sign Out"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0.5rem',
+                  color: 'var(--text-muted)',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-color)',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#f43f5e';
+                  e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = 'var(--text-muted)';
+                  e.currentTarget.style.borderColor = 'var(--border-color)';
+                }}
+              >
+                <LogOut size={16} />
+              </button>
+            </>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Link
+                to="/login"
+                className="btn btn-secondary"
+                style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem' }}
+              >
+                <LogIn size={15} />
+                <span>Sign In</span>
+              </Link>
+              <Link
+                to="/register"
+                className="btn btn-primary"
+                style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem' }}
+              >
+                <span>Register</span>
+              </Link>
+            </div>
+          )}
         </div>
       </div>
     </nav>

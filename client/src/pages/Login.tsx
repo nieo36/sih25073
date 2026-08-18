@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Eye, EyeOff, Mail, ChevronDown, Globe } from 'lucide-react';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Eye, EyeOff, Mail, ChevronDown, Globe, CheckCircle2, AlertCircle, KeyRound } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 /* ─────────────────────────────────────────────
    VYOMA Login — Bauhaus V2 / Neo-Brutalist
@@ -70,12 +71,6 @@ const GoogleIcon = () => (
   </svg>
 );
 
-// ── Apple SVG ──────────────────────
-const AppleIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.62-1.487 3.605-2.937 1.15-1.685 1.62-3.32 1.638-3.406-.035-.015-3.187-1.222-3.218-4.85-.026-3.04 2.484-4.5 2.59-4.56-1.428-2.09-3.619-2.37-4.39-2.415-1.921-.131-3.774 1.104-4.511 1.104zm1.516-3.668c.84-1.025 1.405-2.454 1.252-3.882-1.226.049-2.736.818-3.61 1.854-.783.916-1.455 2.38-1.272 3.777 1.378.107 2.784-.717 3.63-1.749z" />
-  </svg>
-);
 
 // ── Bauhaus decorative element ──────────────────────
 const BauhausDecor = () => (
@@ -101,21 +96,70 @@ const BauhausDecor = () => (
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [showTwoFactorInput, setShowTwoFactorInput] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const [lang, setLang] = useState<'en' | 'hi'>('en');
   const [langOpen, setLangOpen] = useState(false);
   const [error, setError] = useState('');
+  const [infoNotice, setInfoNotice] = useState<string | null>(null);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const { login, loginWithGoogle } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+
+  React.useEffect(() => {
+    if (searchParams.get('verified') === 'true') {
+      setInfoNotice('Your email address has been verified successfully! Please sign in.');
+    } else if (searchParams.get('resetSuccess') === 'true') {
+      setInfoNotice('Password updated successfully! Please sign in with your new password.');
+    }
+    const errParam = searchParams.get('error');
+    if (errParam) {
+      setError(decodeURIComponent(errParam));
+    }
+  }, [searchParams]);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!email) { setError('Please enter your email address.'); return; }
-    if (!password) { setError('Please enter your password.'); return; }
+    setInfoNotice(null);
+
+    if (!email) {
+      setError('Please enter your email address.');
+      return;
+    }
+    if (!password) {
+      setError('Please enter your password.');
+      return;
+    }
+
     setLoading(true);
-    // Mock auth — frontend only
-    setTimeout(() => setLoading(false), 1500);
+    try {
+      await login({
+        email,
+        password,
+        twoFactorCode: showTwoFactorInput ? twoFactorCode : undefined,
+      });
+      const from = (location.state as any)?.from?.pathname || '/dashboard';
+      navigate(from, { replace: true });
+    } catch (err: any) {
+      const errMsg = err?.message || 'Login failed. Please check your credentials.';
+      if (
+        errMsg.toLowerCase().includes('two factor') ||
+        errMsg.toLowerCase().includes('2fa')
+      ) {
+        setShowTwoFactorInput(true);
+        setError('Please enter your 6-digit Authenticator 2FA code to continue.');
+      } else {
+        setError(errMsg);
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -364,9 +408,8 @@ export const Login: React.FC = () => {
                   <label htmlFor="vyoma-password" style={{ ...labelStyle, marginBottom: 0 }}>
                     Password
                   </label>
-                  <a
-                    href="#"
-                    onClick={(e) => e.preventDefault()}
+                  <Link
+                    to="/forgot-password"
                     style={{
                       fontFamily: T.fontHeadline,
                       fontWeight: 700,
@@ -376,11 +419,11 @@ export const Login: React.FC = () => {
                       textDecoration: 'none',
                       letterSpacing: '0.01em',
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
-                    onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
+                    onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
+                    onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
                   >
                     Forgot password?
-                  </a>
+                  </Link>
                 </div>
                 <div style={{ position: 'relative' }}>
                   <input
@@ -420,20 +463,82 @@ export const Login: React.FC = () => {
                 </div>
               </div>
 
+              {/* 2FA Code Input (Conditional) */}
+              {showTwoFactorInput && (
+                <div>
+                  <label htmlFor="vyoma-2fa" style={{ ...labelStyle, color: T.tertiary }}>
+                    Two-Factor Authentication Code (2FA)
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <KeyRound
+                      size={18}
+                      color={T.tertiary}
+                      style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)' }}
+                    />
+                    <input
+                      id="vyoma-2fa"
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="6-digit Authenticator Code"
+                      value={twoFactorCode}
+                      onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      onFocus={() => setFocusedField('2fa')}
+                      onBlur={() => setFocusedField(null)}
+                      style={{
+                        ...brutalInput,
+                        paddingRight: '2rem',
+                        borderColor: T.tertiary,
+                        fontWeight: 700,
+                        letterSpacing: '0.15em',
+                      }}
+                      autoComplete="one-time-code"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Info Notice */}
+              {infoNotice && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    fontFamily: T.fontBody,
+                    fontSize: '0.85rem',
+                    color: '#059669',
+                    fontWeight: 600,
+                    borderLeft: `3px solid #059669`,
+                    background: '#ECFDF5',
+                    padding: '0.6rem 0.75rem',
+                    marginTop: '-0.75rem',
+                  }}
+                >
+                  <CheckCircle2 size={16} />
+                  <span>{infoNotice}</span>
+                </div>
+              )}
+
               {/* Error */}
               {error && (
                 <div
                   style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
                     fontFamily: T.fontBody,
                     fontSize: '0.85rem',
                     color: T.secondary,
                     fontWeight: 600,
                     borderLeft: `3px solid ${T.secondary}`,
-                    paddingLeft: '0.75rem',
+                    background: '#FEF2F2',
+                    padding: '0.6rem 0.75rem',
                     marginTop: '-0.75rem',
                   }}
                 >
-                  {error}
+                  <AlertCircle size={16} />
+                  <span>{error}</span>
                 </div>
               )}
 
@@ -513,55 +618,49 @@ export const Login: React.FC = () => {
 
             {/* ── OAuth Buttons ───────────────── */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {[
-                { icon: <GoogleIcon />, label: 'Continue with Google' },
-                { icon: <AppleIcon />, label: 'Continue with Apple' },
-              ].map(({ icon, label }) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => {/* placeholder */}}
-                  style={{
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.65rem',
-                    background: T.surfaceLowest,
-                    color: T.primary,
-                    fontFamily: T.fontHeadline,
-                    fontWeight: 700,
-                    fontSize: '0.85rem',
-                    textTransform: 'uppercase',
-                    padding: '0.8rem',
-                    border: T.border3,
-                    boxShadow: T.shadow4,
-                    cursor: 'pointer',
-                    transition: 'all 0.1s',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = T.surfaceVariant;
-                    e.currentTarget.style.transform = 'translate(-1px, -1px)';
-                    e.currentTarget.style.boxShadow = '5px 5px 0px 0px rgba(26,26,26,1)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = T.surfaceLowest;
-                    e.currentTarget.style.transform = 'none';
-                    e.currentTarget.style.boxShadow = T.shadow4;
-                  }}
-                  onMouseDown={(e) => {
-                    e.currentTarget.style.transform = 'translate(2px, 2px)';
-                    e.currentTarget.style.boxShadow = '2px 2px 0px 0px rgba(26,26,26,1)';
-                  }}
-                  onMouseUp={(e) => {
-                    e.currentTarget.style.transform = 'translate(-1px, -1px)';
-                    e.currentTarget.style.boxShadow = '5px 5px 0px 0px rgba(26,26,26,1)';
-                  }}
-                >
-                  {icon}
-                  {label}
-                </button>
-              ))}
+              <button
+                type="button"
+                onClick={loginWithGoogle}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.65rem',
+                  background: T.surfaceLowest,
+                  color: T.primary,
+                  fontFamily: T.fontHeadline,
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  textTransform: 'uppercase',
+                  padding: '0.8rem',
+                  border: T.border3,
+                  boxShadow: T.shadow4,
+                  cursor: 'pointer',
+                  transition: 'all 0.1s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = T.surfaceVariant;
+                  e.currentTarget.style.transform = 'translate(-1px, -1px)';
+                  e.currentTarget.style.boxShadow = '5px 5px 0px 0px rgba(26,26,26,1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = T.surfaceLowest;
+                  e.currentTarget.style.transform = 'none';
+                  e.currentTarget.style.boxShadow = T.shadow4;
+                }}
+                onMouseDown={(e) => {
+                  e.currentTarget.style.transform = 'translate(2px, 2px)';
+                  e.currentTarget.style.boxShadow = '2px 2px 0px 0px rgba(26,26,26,1)';
+                }}
+                onMouseUp={(e) => {
+                  e.currentTarget.style.transform = 'translate(-1px, -1px)';
+                  e.currentTarget.style.boxShadow = '5px 5px 0px 0px rgba(26,26,26,1)';
+                }}
+              >
+                <GoogleIcon />
+                Continue with Google
+              </button>
             </div>
           </div>
         </div>
