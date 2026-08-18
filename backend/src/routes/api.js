@@ -1,5 +1,9 @@
-const express=require('express');
+const express = require('express');
+const { auth } = require('./auth/auth.route.js');
+const { requireAuth } = require('../middleware/auth.js');
 
-const api=express.Router();
+const api = express.Router();
 
-module.exports={api};
+api.use("/auth", auth);
+
+module.exports = { api };
