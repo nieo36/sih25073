@@ -1,10 +1,32 @@
+import { Pose, Results, Options } from '@mediapipe/pose';
 import { NormalizedLandmark, POSE_CONNECTIONS, PoseLandmark } from './landmarks';
 
-export interface PoseDetectorConfig {
-  modelComplexity?: 0 | 1 | 2;
-  smoothLandmarks?: boolean;
-  minDetectionConfidence?: number;
-  minTrackingConfidence?: number;
+export { Pose };
+export type { Results, Options };
+
+export interface PoseDetectorConfig extends Options {}
+
+/**
+ * Creates and initializes a MediaPipe Pose detector instance with WASM dependencies
+ */
+export function createPoseDetector(
+  onResults: (results: Results) => void,
+  options?: Options
+): Pose {
+  const pose = new Pose({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
+  });
+
+  pose.setOptions({
+    modelComplexity: 1,
+    smoothLandmarks: true,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+    ...options,
+  });
+
+  pose.onResults(onResults);
+  return pose;
 }
 
 /**
@@ -109,14 +131,31 @@ export function drawPoseSkeleton(
  */
 export class PoseEngine {
   private isInitialized = false;
+  private pose: Pose | null = null;
 
-  public async initialize(_config: PoseDetectorConfig = {}): Promise<boolean> {
-    // Config hook for MediaPipe Vision / WebAssembly runtime
+  public async initialize(
+    onResults: (results: Results) => void,
+    config: PoseDetectorConfig = {}
+  ): Promise<boolean> {
+    this.pose = createPoseDetector(onResults, config);
+    await this.pose.initialize();
     this.isInitialized = true;
     return this.isInitialized;
   }
 
+  public getDetector(): Pose | null {
+    return this.pose;
+  }
+
   public isReady(): boolean {
     return this.isInitialized;
+  }
+
+  public close(): void {
+    if (this.pose) {
+      this.pose.close();
+      this.pose = null;
+      this.isInitialized = false;
+    }
   }
 }

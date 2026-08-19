@@ -25,10 +25,13 @@ export const App: React.FC = () => {
           <Navbar />
           <main style={{ flex: 1, paddingBottom: '3rem' }}>
             <Routes>
-              {/* Default Redirect */}
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              {/* Default Redirect to Assessment Studio for Instant Development Testing */}
+              <Route path="/" element={<Navigate to="/assessment" replace />} />
 
-              {/* Public-only Auth Routes (Redirects to /dashboard if already signed in) */}
+              {/* Directly Accessible Assessment Route without Auth Blocking */}
+              <Route path="/assessment" element={<Assessment />} />
+
+              {/* Public-only Auth Routes */}
               <Route
                 path="/login"
                 element={
@@ -56,14 +59,6 @@ export const App: React.FC = () => {
                 element={
                   <ProtectedRoute>
                     <Dashboard />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/assessment"
-                element={
-                  <ProtectedRoute>
-                    <Assessment />
                   </ProtectedRoute>
                 }
               />
@@ -101,7 +96,7 @@ export const App: React.FC = () => {
               />
 
               {/* Fallback */}
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              <Route path="*" element={<Navigate to="/assessment" replace />} />
             </Routes>
           </main>
         </div>

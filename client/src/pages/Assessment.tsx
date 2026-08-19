@@ -1,33 +1,45 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { CameraView, CameraViewRef } from '../components/CameraView';
-import { ScoreCard } from '../components/ScoreCard';
+import { Camera } from '@mediapipe/camera_utils';
+import { createPoseDetector, drawPoseSkeleton, Results, Pose } from '../mediapipe/pose';
 import { SquatAnalyzer } from '../mediapipe/squat';
 import { PushupAnalyzer } from '../mediapipe/pushup';
-import { drawPoseSkeleton } from '../mediapipe/pose';
-import { NormalizedLandmark } from '../mediapipe/landmarks';
+import { ScoreCard } from '../components/ScoreCard';
 import { computeOverallAssessmentScore, AssessmentScore } from '../analytics/scoring';
 import { calculateSessionMetrics } from '../analytics/metrics';
 import { OfflineStorage } from '../storage/indexedDB';
 import { ApiService } from '../services/api';
-import { 
-  Activity, 
-  Check, 
-  Dumbbell, 
-  Eye, 
-  Play, 
-  RotateCcw, 
-  Save, 
-  Square, 
-  Zap 
+import {
+  Activity,
+  AlertCircle,
+  Camera as CameraIcon,
+  CameraOff,
+  Check,
+  Dumbbell,
+  Eye,
+  Loader2,
+  Play,
+  RotateCcw,
+  Save,
+  Square,
+  Zap,
 } from 'lucide-react';
 
 export const Assessment: React.FC = () => {
+  // Assessment Configuration & Tracking State
   const [exercise, setExercise] = useState<'squat' | 'pushup'>('squat');
   const [isAssessing, setIsAssessing] = useState<boolean>(false);
   const [duration, setDuration] = useState<number>(0);
-  const [liveFeedback, setLiveFeedback] = useState<string>('Align yourself in camera frame and tap Start Test');
+  const [liveFeedback, setLiveFeedback] = useState<string>('Start camera feed and align full body in frame');
   const [currentAngle, setCurrentAngle] = useState<number>(180);
   const [repCount, setRepCount] = useState<number>(0);
+  const [fps, setFps] = useState<number>(0);
+
+  // Camera & Pipeline State
+  const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
+  const [isCameraLoading, setIsCameraLoading] = useState<boolean>(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
+  // Session Result State
   const [score, setScore] = useState<AssessmentScore>({
     totalScore: 0,
     formAccuracy: 100,
@@ -41,12 +53,33 @@ export const Assessment: React.FC = () => {
   const [completed, setCompleted] = useState<boolean>(false);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
 
-  const cameraRef = useRef<CameraViewRef>(null);
+  // Isolated Hardware & Model References (prevent re-renders on video frames)
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const cameraRef = useRef<Camera | null>(null);
+  const poseRef = useRef<Pose | null>(null);
+
+  // Biomechanical Analyzer References
   const squatAnalyzerRef = useRef<SquatAnalyzer>(new SquatAnalyzer());
   const pushupAnalyzerRef = useRef<PushupAnalyzer>(new PushupAnalyzer());
-  const timerRef = useRef<number | null>(null);
 
-  // Timer effect
+  // Real-time State Mirror Refs for Animation / Callback Loops
+  const isAssessingRef = useRef<boolean>(isAssessing);
+  const exerciseRef = useRef<'squat' | 'pushup'>('squat');
+  const timerRef = useRef<number | null>(null);
+  const frameCountRef = useRef<number>(0);
+  const lastFpsTimeRef = useRef<number>(performance.now());
+
+  // Keep ref values in sync with React state
+  useEffect(() => {
+    isAssessingRef.current = isAssessing;
+  }, [isAssessing]);
+
+  useEffect(() => {
+    exerciseRef.current = exercise;
+  }, [exercise]);
+
+  // Assessment Duration Timer
   useEffect(() => {
     if (isAssessing) {
       timerRef.current = window.setInterval(() => {
@@ -60,7 +93,168 @@ export const Assessment: React.FC = () => {
     };
   }, [isAssessing]);
 
-  const handleStart = () => {
+  /**
+   * MediaPipe Pose Result Handler - Process Frame, Draw Skeleton, Evaluate Kinematics
+   */
+  const onResults = useCallback((results: Results) => {
+    // 1. Track FPS
+    frameCountRef.current++;
+    const now = performance.now();
+    if (now - lastFpsTimeRef.current >= 1000) {
+      setFps(frameCountRef.current);
+      frameCountRef.current = 0;
+      lastFpsTimeRef.current = now;
+    }
+
+    // 2. Prepare 2D Canvas
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    if (canvas.width !== 1280 || canvas.height !== 720) {
+      canvas.width = 1280;
+      canvas.height = 720;
+    }
+
+    // 3. Clear canvas & render live camera frame
+    ctx.save();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (results.image) {
+      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+    }
+
+    // 4. Render skeleton overlay
+    if (results.poseLandmarks && results.poseLandmarks.length > 0) {
+      drawPoseSkeleton(ctx, results.poseLandmarks, canvas.width, canvas.height, {
+        pointColor: '#06b6d4',
+        lineColor: 'rgba(6, 182, 212, 0.85)',
+        pointRadius: 5,
+        lineWidth: 3,
+        minConfidence: 0.45,
+      });
+
+      // 5. If assessment active, feed landmarks into exercise analyzer
+      if (isAssessingRef.current) {
+        if (exerciseRef.current === 'squat') {
+          const feedback = squatAnalyzerRef.current.process(results.poseLandmarks);
+          setRepCount(feedback.repCount);
+          setCurrentAngle(feedback.kneeAngle);
+          setLiveFeedback(feedback.feedbackMessage);
+
+          const computed = computeOverallAssessmentScore({
+            repsCompleted: feedback.repCount,
+            validReps: feedback.repCount,
+            avgFormAccuracy: squatAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 85,
+            avgDepthScore: feedback.isGoodDepth ? 96 : 72,
+            cadenceConsistency: 88,
+            avgSymmetry: feedback.symmetryScore,
+          });
+          setScore(computed);
+        } else {
+          const feedback = pushupAnalyzerRef.current.process(results.poseLandmarks);
+          setRepCount(feedback.repCount);
+          setCurrentAngle(feedback.elbowAngle);
+          setLiveFeedback(feedback.feedbackMessage);
+
+          const computed = computeOverallAssessmentScore({
+            repsCompleted: feedback.repCount,
+            validReps: feedback.repCount,
+            avgFormAccuracy: pushupAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 85,
+            avgDepthScore: feedback.isGoodAlignment ? 94 : 68,
+            cadenceConsistency: 85,
+            avgSymmetry: feedback.symmetryScore,
+          });
+          setScore(computed);
+        }
+      }
+    }
+
+    ctx.restore();
+  }, []);
+
+  /**
+   * Start Webcam Stream & MediaPipe Pipeline
+   */
+  const handleStartCamera = async () => {
+    try {
+      setIsCameraLoading(true);
+      setCameraError(null);
+
+      // Initialize MediaPipe Pose instance if not present
+      if (!poseRef.current) {
+        poseRef.current = createPoseDetector(onResults);
+        await poseRef.current.initialize();
+      }
+
+      if (!videoRef.current) {
+        throw new Error('Video DOM reference not ready');
+      }
+
+      // Initialize MediaPipe Camera helper
+      const camera = new Camera(videoRef.current, {
+        onFrame: async () => {
+          if (videoRef.current && poseRef.current) {
+            await poseRef.current.send({ image: videoRef.current });
+          }
+        },
+        width: 1280,
+        height: 720,
+      });
+
+      await camera.start();
+      cameraRef.current = camera;
+      setIsCameraActive(true);
+      setLiveFeedback('Camera active. Tap "Start AI Assessment" to record reps.');
+    } catch (err: any) {
+      console.error('Camera initialization error:', err);
+      setCameraError(err.message || 'Could not access webcam device. Please verify camera permissions.');
+      setIsCameraActive(false);
+    } finally {
+      setIsCameraLoading(false);
+    }
+  };
+
+  /**
+   * Stop Webcam Stream & Free Pipeline Resources
+   */
+  const handleStopCamera = async () => {
+    if (cameraRef.current) {
+      await cameraRef.current.stop();
+      cameraRef.current = null;
+    }
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach((t) => t.stop());
+      videoRef.current.srcObject = null;
+    }
+    setIsCameraActive(false);
+    setFps(0);
+
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  };
+
+  // Cleanup on component unmount
+  useEffect(() => {
+    return () => {
+      if (cameraRef.current) {
+        cameraRef.current.stop();
+      }
+      if (poseRef.current) {
+        poseRef.current.close();
+      }
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+
+  const handleStartAssessment = () => {
     squatAnalyzerRef.current.reset();
     pushupAnalyzerRef.current.reset();
     setRepCount(0);
@@ -68,10 +262,10 @@ export const Assessment: React.FC = () => {
     setCompleted(false);
     setSavedSuccess(false);
     setIsAssessing(true);
-    setLiveFeedback(`Assessment started! Perform controlled ${exercise === 'squat' ? 'squats' : 'pushups'}`);
+    setLiveFeedback(`Assessment started! Perform controlled ${exercise === 'squat' ? 'deep squats' : 'pushups'}.`);
   };
 
-  const handleStop = async () => {
+  const handleStopAssessment = async () => {
     setIsAssessing(false);
     setCompleted(true);
 
@@ -79,16 +273,19 @@ export const Assessment: React.FC = () => {
     const computedScore = computeOverallAssessmentScore({
       repsCompleted: repCount,
       validReps,
-      avgFormAccuracy: exercise === 'squat' ? squatAnalyzerRef.current.getAverageFormScore() || 88 : pushupAnalyzerRef.current.getAverageFormScore() || 86,
+      avgFormAccuracy:
+        exercise === 'squat'
+          ? squatAnalyzerRef.current.getAverageFormScore() || 88
+          : pushupAnalyzerRef.current.getAverageFormScore() || 86,
       avgDepthScore: 92,
       cadenceConsistency: 85,
       avgSymmetry: 94,
     });
 
     setScore(computedScore);
-    setLiveFeedback(`Assessment complete! Recorded ${repCount} reps with ${computedScore.grade} rating.`);
+    setLiveFeedback(`Assessment finished! Recorded ${repCount} reps with ${computedScore.grade} rating.`);
 
-    // Persist to IndexedDB
+    // Persist session to IndexedDB & sync
     try {
       await OfflineStorage.saveAssessment({
         id: `sess-${Date.now()}`,
@@ -105,7 +302,6 @@ export const Assessment: React.FC = () => {
         synced: false,
       });
 
-      // Also try API sync
       await ApiService.uploadAssessment({
         exerciseType: exercise,
         repsCompleted: repCount,
@@ -127,7 +323,7 @@ export const Assessment: React.FC = () => {
     }
   };
 
-  // Simulated Rep Trigger for quick testing & demonstration
+  // Simulated Rep Trigger for rapid local testing
   const handleSimulateRep = (isGood: boolean) => {
     if (!isAssessing) return;
     const newCount = repCount + 1;
@@ -154,62 +350,6 @@ export const Assessment: React.FC = () => {
     );
   };
 
-  const handleFrame = useCallback((_video: HTMLVideoElement, canvas: HTMLCanvasElement) => {
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // If assessment is active, draw posture guides
-    if (isAssessing) {
-      // Draw dynamic calibration grid & guide box
-      ctx.strokeStyle = 'rgba(6, 182, 212, 0.3)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(100, 50, canvas.width - 200, canvas.height - 100);
-
-      // Draw synthetic keypoints if camera is live
-      const mockLandmarks: NormalizedLandmark[] = [
-        { x: 0.5, y: 0.2, visibility: 0.95 },
-        { x: 0.48, y: 0.18, visibility: 0.9 },
-        { x: 0.52, y: 0.18, visibility: 0.9 },
-        { x: 0.45, y: 0.19, visibility: 0.9 },
-        { x: 0.55, y: 0.19, visibility: 0.9 },
-        { x: 0.43, y: 0.22, visibility: 0.9 },
-        { x: 0.57, y: 0.22, visibility: 0.9 },
-        { x: 0.42, y: 0.23, visibility: 0.9 },
-        { x: 0.58, y: 0.23, visibility: 0.9 },
-        { x: 0.47, y: 0.25, visibility: 0.9 },
-        { x: 0.53, y: 0.25, visibility: 0.9 },
-        { x: 0.42, y: 0.35, visibility: 0.95 },
-        { x: 0.58, y: 0.35, visibility: 0.95 },
-        { x: 0.38, y: 0.48, visibility: 0.9 },
-        { x: 0.62, y: 0.48, visibility: 0.9 },
-        { x: 0.36, y: 0.6, visibility: 0.9 },
-        { x: 0.64, y: 0.6, visibility: 0.9 },
-        { x: 0.35, y: 0.62, visibility: 0.9 },
-        { x: 0.65, y: 0.62, visibility: 0.9 },
-        { x: 0.35, y: 0.64, visibility: 0.9 },
-        { x: 0.65, y: 0.64, visibility: 0.9 },
-        { x: 0.37, y: 0.61, visibility: 0.9 },
-        { x: 0.63, y: 0.61, visibility: 0.9 },
-        { x: 0.45, y: 0.6, visibility: 0.95 },
-        { x: 0.55, y: 0.6, visibility: 0.95 },
-        { x: 0.44, y: 0.78, visibility: 0.95 },
-        { x: 0.56, y: 0.78, visibility: 0.95 },
-        { x: 0.44, y: 0.95, visibility: 0.95 },
-        { x: 0.56, y: 0.95, visibility: 0.95 },
-        { x: 0.43, y: 0.97, visibility: 0.9 },
-        { x: 0.57, y: 0.97, visibility: 0.9 },
-        { x: 0.42, y: 0.98, visibility: 0.9 },
-        { x: 0.58, y: 0.98, visibility: 0.9 },
-      ];
-
-      drawPoseSkeleton(ctx, mockLandmarks, canvas.width, canvas.height, {
-        pointColor: '#06b6d4',
-        lineColor: 'rgba(6, 182, 212, 0.7)',
-      });
-    }
-  }, [isAssessing]);
-
   const metrics = calculateSessionMetrics({
     exerciseType: exercise,
     reps: repCount,
@@ -218,26 +358,36 @@ export const Assessment: React.FC = () => {
 
   return (
     <div className="container" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {/* Assessment Header */}
+      {/* Hidden Video Feed (Processed by MediaPipe Camera) */}
+      <video
+        ref={videoRef}
+        playsInline
+        muted
+        style={{ display: 'none' }}
+      />
+
+      {/* Header & Exercise Mode Switcher */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ fontSize: '1.85rem', fontWeight: 800 }}>
             Real-Time AI <span className="gradient-text">Pose Assessment Studio</span>
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            Biomechanical Computer Vision Pipeline • High-Speed Joint Angle Kinematics
+            MediaPipe WASM Biomechanical Vision • 33-Point Skeleton Kinematics
           </p>
         </div>
 
         {/* Exercise Switcher */}
-        <div style={{
-          display: 'flex',
-          background: 'rgba(15, 23, 42, 0.8)',
-          padding: '0.35rem',
-          borderRadius: 'var(--radius-md)',
-          border: '1px solid var(--border-color)',
-          gap: '0.5rem',
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            background: 'rgba(15, 23, 42, 0.8)',
+            padding: '0.35rem',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-color)',
+            gap: '0.5rem',
+          }}
+        >
           <button
             disabled={isAssessing}
             onClick={() => setExercise('squat')}
@@ -280,62 +430,278 @@ export const Assessment: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Vision Stage & Live Telemetry HUD */}
+      {/* Main Vision Stage & Telemetry HUD */}
       <div className="grid-2">
-        {/* Left Column: Live Camera & Vision Overlay */}
+        {/* Left Column: Live Camera & Vision Canvas Overlay */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div className="glass-panel" style={{ padding: '0.75rem', position: 'relative' }}>
-            <CameraView ref={cameraRef} onFrame={handleFrame} />
-
-            {/* In-Frame Live Rep Gauge Overlay */}
-            <div style={{
-              position: 'absolute',
-              bottom: '1.5rem',
-              left: '1.5rem',
+          <div
+            className="glass-panel"
+            style={{
+              padding: '0.75rem',
+              position: 'relative',
+              minHeight: '480px',
               display: 'flex',
               alignItems: 'center',
-              gap: '0.75rem',
-              background: 'rgba(9, 13, 22, 0.85)',
-              backdropFilter: 'blur(12px)',
-              padding: '0.6rem 1rem',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--border-color)',
-            }}>
-              <div>
-                <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                  Target Angle
-                </span>
-                <div style={{ fontSize: '1.3rem', fontWeight: 800, color: currentAngle <= 95 ? '#10b981' : 'var(--accent-amber)', fontFamily: 'var(--font-mono)' }}>
-                  {currentAngle}°
+              justifyContent: 'center',
+              background: '#05070c',
+              overflow: 'hidden',
+              borderRadius: 'var(--radius-lg)',
+            }}
+          >
+            {/* Live MediaPipe Output Canvas */}
+            <canvas
+              ref={canvasRef}
+              width={1280}
+              height={720}
+              style={{
+                width: '100%',
+                height: 'auto',
+                maxHeight: '480px',
+                objectFit: 'cover',
+                borderRadius: 'var(--radius-md)',
+                display: isCameraActive ? 'block' : 'none',
+                transform: 'scaleX(-1)', // Mirror user perspective
+              }}
+            />
+
+            {/* Standby / Inactive Camera Card */}
+            {!isCameraActive && (
+              <div
+                style={{
+                  height: '460px',
+                  width: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'linear-gradient(180deg, #090d16 0%, #111827 100%)',
+                  padding: '2rem',
+                  textAlign: 'center',
+                  gap: '1rem',
+                  borderRadius: 'var(--radius-md)',
+                }}
+              >
+                <div
+                  style={{
+                    width: '68px',
+                    height: '68px',
+                    borderRadius: '50%',
+                    background: 'rgba(6, 182, 212, 0.12)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid rgba(6, 182, 212, 0.3)',
+                    boxShadow: '0 0 20px rgba(6, 182, 212, 0.15)',
+                  }}
+                >
+                  {isCameraLoading ? (
+                    <Loader2 size={32} color="var(--accent-cyan)" className="animate-spin" />
+                  ) : (
+                    <CameraIcon size={32} color="var(--accent-cyan)" />
+                  )}
+                </div>
+
+                <div>
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.35rem' }}>
+                    {isCameraLoading ? 'Initializing MediaPipe Pipeline...' : 'MediaPipe Vision Ready'}
+                  </h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', maxWidth: '440px' }}>
+                    {cameraError ? (
+                      <span style={{ color: '#f43f5e', display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center' }}>
+                        <AlertCircle size={15} /> {cameraError}
+                      </span>
+                    ) : (
+                      'High-speed 33-point pose landmark estimation with real-time joint angles and automated rep detection.'
+                    )}
+                  </p>
+                </div>
+
+                <button
+                  disabled={isCameraLoading}
+                  onClick={handleStartCamera}
+                  className="btn btn-primary"
+                  style={{ marginTop: '0.5rem', padding: '0.75rem 1.75rem', fontWeight: 700 }}
+                >
+                  {isCameraLoading ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" /> Loading WASM Models...
+                    </>
+                  ) : (
+                    <>
+                      <CameraIcon size={16} /> Start Camera
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* In-Frame Live Rep Gauge Overlay (Visible during live camera) */}
+            {isCameraActive && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '1.5rem',
+                  left: '1.5rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  background: 'rgba(9, 13, 22, 0.85)',
+                  backdropFilter: 'blur(12px)',
+                  padding: '0.6rem 1rem',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-color)',
+                  zIndex: 10,
+                }}
+              >
+                <div>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                    Joint Angle
+                  </span>
+                  <div
+                    style={{
+                      fontSize: '1.3rem',
+                      fontWeight: 800,
+                      color: currentAngle <= 95 ? '#10b981' : 'var(--accent-amber)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    {currentAngle}°
+                  </div>
+                </div>
+                <div style={{ width: '1px', height: '30px', background: 'var(--border-color)' }} />
+                <div>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                    Reps Count
+                  </span>
+                  <div
+                    style={{
+                      fontSize: '1.3rem',
+                      fontWeight: 800,
+                      color: 'var(--accent-cyan)',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    {repCount}
+                  </div>
                 </div>
               </div>
-              <div style={{ width: '1px', height: '30px', background: 'var(--border-color)' }} />
-              <div>
-                <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                  Reps Count
+            )}
+
+            {/* Top Camera Status Overlay */}
+            <div
+              style={{
+                position: 'absolute',
+                top: '1.25rem',
+                left: '1.25rem',
+                right: '1.25rem',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                pointerEvents: 'auto',
+                zIndex: 10,
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  background: 'rgba(0, 0, 0, 0.75)',
+                  backdropFilter: 'blur(8px)',
+                  padding: '0.35rem 0.85rem',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: '0.8rem',
+                  border: '1px solid var(--border-color)',
+                }}
+              >
+                <span
+                  style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    background: isCameraActive ? '#10b981' : '#f43f5e',
+                    boxShadow: isCameraActive ? '0 0 8px #10b981' : 'none',
+                  }}
+                />
+                <span style={{ fontWeight: 600 }}>{isCameraActive ? 'MEDIAPIPE LIVE' : 'CAMERA STANDBY'}</span>
+                <span style={{ color: 'var(--text-muted)' }}>|</span>
+                <span style={{ color: 'var(--accent-cyan)', fontFamily: 'var(--font-mono)' }}>
+                  {fps > 0 ? `${fps} FPS` : '60 FPS'}
                 </span>
-                <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--accent-cyan)', fontFamily: 'var(--font-mono)' }}>
-                  {repCount}
-                </div>
               </div>
+
+              {/* Dedicated Camera Toggle Button in Viewport */}
+              <button
+                disabled={isCameraLoading}
+                onClick={isCameraActive ? handleStopCamera : handleStartCamera}
+                className="btn btn-secondary"
+                style={{
+                  padding: '0.4rem 0.85rem',
+                  fontSize: '0.8rem',
+                  background: 'rgba(0, 0, 0, 0.75)',
+                  backdropFilter: 'blur(8px)',
+                }}
+              >
+                {isCameraActive ? (
+                  <>
+                    <CameraOff size={14} /> Stop Camera
+                  </>
+                ) : (
+                  <>
+                    <CameraIcon size={14} /> Start Camera
+                  </>
+                )}
+              </button>
             </div>
           </div>
 
           {/* Test Control Action Bar */}
-          <div className="glass-panel" style={{ padding: '1.25rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <div
+            className="glass-panel"
+            style={{
+              padding: '1.25rem',
+              display: 'flex',
+              gap: '0.75rem',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              {/* Assessment Start / Stop */}
               {!isAssessing ? (
-                <button onClick={handleStart} className="btn btn-primary" style={{ padding: '0.75rem 1.5rem' }}>
+                <button
+                  onClick={handleStartAssessment}
+                  className="btn btn-primary"
+                  style={{ padding: '0.75rem 1.5rem' }}
+                >
                   <Play size={18} fill="#fff" /> Start AI Assessment
                 </button>
               ) : (
-                <button onClick={handleStop} className="btn btn-danger" style={{ padding: '0.75rem 1.5rem' }}>
+                <button
+                  onClick={handleStopAssessment}
+                  className="btn btn-danger"
+                  style={{ padding: '0.75rem 1.5rem' }}
+                >
                   <Square size={18} fill="currentColor" /> Finish & Submit
                 </button>
               )}
 
+              {/* Toggle Camera Button */}
+              <button
+                disabled={isCameraLoading}
+                onClick={isCameraActive ? handleStopCamera : handleStartCamera}
+                className="btn btn-secondary"
+              >
+                {isCameraActive ? <CameraOff size={16} /> : <CameraIcon size={16} />}
+                {isCameraActive ? 'Stop Camera' : 'Start Camera'}
+              </button>
+
+              {/* Reset Session */}
               <button
                 onClick={() => {
+                  squatAnalyzerRef.current.reset();
+                  pushupAnalyzerRef.current.reset();
                   setRepCount(0);
                   setDuration(0);
                   setScore({
@@ -349,6 +715,7 @@ export const Assessment: React.FC = () => {
                     validReps: 0,
                   });
                   setCompleted(false);
+                  setLiveFeedback('Session reset. Ready for next assessment.');
                 }}
                 className="btn btn-secondary"
               >
@@ -356,7 +723,7 @@ export const Assessment: React.FC = () => {
               </button>
             </div>
 
-            {/* Live Simulation Controls */}
+            {/* Live Simulation Controls for developer convenience */}
             {isAssessing && (
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
@@ -389,35 +756,93 @@ export const Assessment: React.FC = () => {
 
           {/* Session Metrics Panel */}
           <div className="glass-panel" style={{ padding: '1.25rem' }}>
-            <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <h4
+              style={{
+                fontSize: '0.95rem',
+                fontWeight: 700,
+                marginBottom: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+              }}
+            >
               <Eye size={16} color="var(--accent-cyan)" /> Live Kinematic Telemetry
             </h4>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div style={{ background: 'rgba(15, 23, 42, 0.5)', padding: '0.85rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+              <div
+                style={{
+                  background: 'rgba(15, 23, 42, 0.5)',
+                  padding: '0.85rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-color)',
+                }}
+              >
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>TIME UNDER TENSION</span>
                 <div style={{ fontSize: '1.4rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
                   {duration}s
                 </div>
               </div>
 
-              <div style={{ background: 'rgba(15, 23, 42, 0.5)', padding: '0.85rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+              <div
+                style={{
+                  background: 'rgba(15, 23, 42, 0.5)',
+                  padding: '0.85rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-color)',
+                }}
+              >
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>AVG REP CADENCE</span>
-                <div style={{ fontSize: '1.4rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--accent-cyan)' }}>
+                <div
+                  style={{
+                    fontSize: '1.4rem',
+                    fontWeight: 800,
+                    fontFamily: 'var(--font-mono)',
+                    color: 'var(--accent-cyan)',
+                  }}
+                >
                   {metrics.avgRepDuration}s
                 </div>
               </div>
 
-              <div style={{ background: 'rgba(15, 23, 42, 0.5)', padding: '0.85rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+              <div
+                style={{
+                  background: 'rgba(15, 23, 42, 0.5)',
+                  padding: '0.85rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-color)',
+                }}
+              >
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>PEAK VELOCITY INDEX</span>
-                <div style={{ fontSize: '1.4rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: '#10b981' }}>
+                <div
+                  style={{
+                    fontSize: '1.4rem',
+                    fontWeight: 800,
+                    fontFamily: 'var(--font-mono)',
+                    color: '#10b981',
+                  }}
+                >
                   {metrics.peakVelocityScore} <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>pts</span>
                 </div>
               </div>
 
-              <div style={{ background: 'rgba(15, 23, 42, 0.5)', padding: '0.85rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+              <div
+                style={{
+                  background: 'rgba(15, 23, 42, 0.5)',
+                  padding: '0.85rem',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-color)',
+                }}
+              >
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>JOINT STRAIN RATING</span>
-                <div style={{ fontSize: '1.4rem', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--accent-amber)' }}>
+                <div
+                  style={{
+                    fontSize: '1.4rem',
+                    fontWeight: 800,
+                    fontFamily: 'var(--font-mono)',
+                    color: 'var(--accent-amber)',
+                  }}
+                >
                   {metrics.strainIndex} <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>/10</span>
                 </div>
               </div>
@@ -426,16 +851,26 @@ export const Assessment: React.FC = () => {
 
           {/* Completion Status */}
           {completed && (
-            <div className="glass-panel" style={{
-              padding: '1.25rem',
-              background: 'rgba(16, 185, 129, 0.1)',
-              border: '1px solid rgba(16, 185, 129, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}>
+            <div
+              className="glass-panel"
+              style={{
+                padding: '1.25rem',
+                background: 'rgba(16, 185, 129, 0.1)',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <div style={{ background: '#10b981', borderRadius: '50%', padding: '0.35rem', display: 'flex' }}>
+                <div
+                  style={{
+                    background: '#10b981',
+                    borderRadius: '50%',
+                    padding: '0.35rem',
+                    display: 'flex',
+                  }}
+                >
                   <Check size={18} color="#fff" />
                 </div>
                 <div>
@@ -457,3 +892,5 @@ export const Assessment: React.FC = () => {
     </div>
   );
 };
+
+export default Assessment;
