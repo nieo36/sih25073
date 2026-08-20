@@ -106,7 +106,7 @@ export const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [infoNotice, setInfoNotice] = useState<string | null>(null);
 
-  const { login, loginWithGoogle } = useAuth();
+  const { login, loginWithGoogle, isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -148,12 +148,16 @@ export const Login: React.FC = () => {
       navigate(from, { replace: true });
     } catch (err: any) {
       const errMsg = err?.message || 'Login failed. Please check your credentials.';
-      if (
-        errMsg.toLowerCase().includes('two factor') ||
-        errMsg.toLowerCase().includes('2fa')
-      ) {
+      const lower = errMsg.toLowerCase();
+      if (lower.includes('two factor') || lower.includes('2fa')) {
         setShowTwoFactorInput(true);
         setError('Please enter your 6-digit Authenticator 2FA code to continue.');
+      } else if (lower.includes('user not found') || lower.includes('no account')) {
+        setError('No athlete account found with this email address. Please create an account.');
+      } else if (lower.includes('invalid password')) {
+        setError('Invalid password. Please double-check your password or click "Forgot password?".');
+      } else if (lower.includes('verify your email')) {
+        setError('Your email address is not verified. Please check your email inbox to verify.');
       } else {
         setError(errMsg);
       }
@@ -371,6 +375,44 @@ export const Login: React.FC = () => {
                 border: T.border3,
               }}
             />
+
+            {isAuthenticated && user && (
+              <div
+                style={{
+                  background: T.primaryContainer,
+                  border: T.border3,
+                  padding: '0.85rem 1rem',
+                  marginBottom: '1.5rem',
+                  fontFamily: T.fontBody,
+                  fontSize: '0.85rem',
+                  color: T.primary,
+                  fontWeight: 600,
+                  lineHeight: 1.4,
+                }}
+              >
+                You are currently signed in as <strong>{user.name || user.email}</strong>.{' '}
+                <button
+                  type="button"
+                  onClick={() => logout()}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: T.tertiary,
+                    textDecoration: 'underline',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    padding: 0,
+                    fontFamily: T.fontHeadline,
+                  }}
+                >
+                  Sign Out
+                </button>{' '}
+                to change accounts, or go to{' '}
+                <Link to="/dashboard" style={{ color: T.tertiary, fontWeight: 700 }}>
+                  Dashboard
+                </Link>.
+              </div>
+            )}
 
             <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
               {/* Email */}

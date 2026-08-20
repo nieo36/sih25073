@@ -1,8 +1,18 @@
 /**
- * API Service Client for Backend Integration
+ * API Service Client for Backend Integration & MediaPipe Offline-to-Cloud Sync
  */
+import { StoredAssessment } from '../storage/indexedDB';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:2000/api/v1';
+const getApiBaseUrl = (): string => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+    const protocol = window.location.protocol || 'http:';
+    return `${protocol}//${window.location.hostname}:2000/api/v1`;
+  }
+  return 'http://localhost:2000/api/v1';
+};
 
 export interface LoginPayload {
   email: string;
@@ -20,23 +30,9 @@ export interface AuthResponse {
   };
 }
 
-export interface AssessmentPayload {
-  exerciseType: 'squat' | 'pushup';
-  repsCompleted: number;
-  validReps: number;
-  totalScore: number;
-  grade: string;
-  metrics: {
-    durationSeconds: number;
-    caloriesBurned: number;
-    symmetryScore: number;
-    depthScore: number;
-  };
-}
-
 export class ApiService {
   private static getToken(): string | null {
-    return localStorage.getItem('auth_token');
+    return localStorage.getItem('auth_token') || localStorage.getItem('accessToken');
   }
 
   private static async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -47,22 +43,18 @@ export class ApiService {
       ...options.headers,
     };
 
-    try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...options,
-        headers,
-      });
+    const response = await fetch(`${getApiBaseUrl()}${endpoint}`, {
+      ...options,
+      headers,
+      credentials: 'include',
+    });
 
-      if (!response.ok) {
-        throw new Error(`API Error: ${response.status} ${response.statusText}`);
-      }
-
-      return await response.json();
-    } catch (err) {
-      console.warn(`Fallback for API endpoint ${endpoint}:`, err);
-      // Graceful fallback for demo/offline environments
-      throw err;
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`API Error ${response.status}: ${errorBody || response.statusText}`);
     }
+
+    return await response.json();
   }
 
   public static async login(payload: LoginPayload): Promise<AuthResponse> {
@@ -86,14 +78,61 @@ export class ApiService {
     }
   }
 
-  public static async uploadAssessment(payload: AssessmentPayload): Promise<{ success: boolean; id: string }> {
+  public static async syncAssessment(assessment: StoredAssessment): Promise<{ success: boolean; id: string; remoteId?: string }> {
+    return await this.request<{ success: boolean; id: string; remoteId?: string }>('/assessment/sync', {
+      method: 'POST',
+      body: JSON.stringify({
+        localId: assessment.id,
+        athleteId: assessment.athleteId,
+        exerciseType: assessment.exerciseType,
+        totalScore: assessment.totalScore,
+        grade: assessment.grade,
+        repsCompleted: assessment.repsCompleted,
+        validReps: assessment.validReps,
+        durationSeconds: assessment.durationSeconds,
+        caloriesBurned: assessment.caloriesBurned,
+        symmetryScore: assessment.symmetryScore,
+        depthScore: assessment.depthScore,
+        formAccuracy: assessment.formAccuracy,
+        cadenceScore: assessment.cadenceScore,
+        angles: assessment.angles,
+        landmarkSamples: assessment.landmarkSamples,
+        createdAt: assessment.createdAt ? new Date(assessment.createdAt).toISOString() : new Date(assessment.date).toISOString(),
+      }),
+    });
+  }
+
+  public static async batchSyncAssessments(assessments: StoredAssessment[]): Promise<{ success: boolean; syncedIds: string[] }> {
+    return await this.request<{ success: boolean; syncedIds: string[] }>('/assessment/batch-sync', {
+      method: 'POST',
+      body: JSON.stringify({
+        assessments: assessments.map((a) => ({
+          localId: a.id,
+          athleteId: a.athleteId,
+          exerciseType: a.exerciseType,
+          totalScore: a.totalScore,
+          grade: a.grade,
+          repsCompleted: a.repsCompleted,
+          validReps: a.validReps,
+          durationSeconds: a.durationSeconds,
+          caloriesBurned: a.caloriesBurned,
+          symmetryScore: a.symmetryScore,
+          depthScore: a.depthScore,
+          formAccuracy: a.formAccuracy,
+          cadenceScore: a.cadenceScore,
+          angles: a.angles,
+          landmarkSamples: a.landmarkSamples,
+          createdAt: a.createdAt ? new Date(a.createdAt).toISOString() : new Date(a.date).toISOString(),
+        })),
+      }),
+    });
+  }
+
+  public static async getAssessmentHistory() {
     try {
-      return await this.request<{ success: boolean; id: string }>('/assessment/submit', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
+      return await this.request('/assessment/history');
     } catch {
-      return { success: true, id: `assm-${Date.now()}` };
+      return [];
     }
   }
 

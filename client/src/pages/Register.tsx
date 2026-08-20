@@ -229,7 +229,7 @@ export const Register: React.FC = () => {
   const [profilePhotoPreview, setProfilePhotoPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { register: registerUser, loginWithGoogle } = useAuth();
+  const { register: registerUser, loginWithGoogle, saveProfile } = useAuth();
 
   // ── Magic Link Email Verification State ──────────
   const [isEmailVerified, setIsEmailVerified] = useState(false);
@@ -309,6 +309,34 @@ export const Register: React.FC = () => {
           name: formData.fullName.trim(),
           email: formData.email.trim(),
           password: formData.password,
+          profile: {
+            age: formData.age ? Number(formData.age) : undefined,
+            gender: formData.gender,
+            height: formData.height,
+            weight: formData.weight,
+            country: formData.country,
+            state: formData.state,
+            city: formData.city,
+            areaType: formData.areaType,
+            primarySport: formData.primarySport,
+            secondarySports: formData.secondarySports,
+            experienceLevel: formData.experienceLevel,
+            yearsExperience: formData.yearsExperience,
+            athleticGoals: formData.athleticGoals,
+            dominantHand: formData.dominantHand,
+            dominantFoot: formData.dominantFoot,
+            organization: formData.organization,
+            achievements: formData.achievements,
+            bio: formData.bio,
+            trainingFrequency: formData.trainingFrequency,
+          },
+          privacy: {
+            movementInsights: formData.movementInsights,
+            highlightProcessing: formData.highlightProcessing,
+            recruiterDiscoverability: formData.recruiterDiscoverability,
+            profileVisibility: formData.profileVisibility,
+            guardianConsent: formData.guardianConsent,
+          },
         });
       } catch (err: any) {
         const msg = err?.message || 'Registration failed';
@@ -325,6 +353,39 @@ export const Register: React.FC = () => {
         return;
       }
       setSubmitting(false);
+    }
+
+    if (currentStep > 0 && currentStep < STEPS.length - 1) {
+      saveProfile({
+        profile: {
+          age: formData.age ? Number(formData.age) : undefined,
+          gender: formData.gender,
+          height: formData.height,
+          weight: formData.weight,
+          country: formData.country,
+          state: formData.state,
+          city: formData.city,
+          areaType: formData.areaType,
+          primarySport: formData.primarySport,
+          secondarySports: formData.secondarySports,
+          experienceLevel: formData.experienceLevel,
+          yearsExperience: formData.yearsExperience,
+          athleticGoals: formData.athleticGoals,
+          dominantHand: formData.dominantHand,
+          dominantFoot: formData.dominantFoot,
+          organization: formData.organization,
+          achievements: formData.achievements,
+          bio: formData.bio,
+          trainingFrequency: formData.trainingFrequency,
+        },
+        privacy: {
+          movementInsights: formData.movementInsights,
+          highlightProcessing: formData.highlightProcessing,
+          recruiterDiscoverability: formData.recruiterDiscoverability,
+          profileVisibility: formData.profileVisibility,
+          guardianConsent: formData.guardianConsent,
+        },
+      }).catch(() => {});
     }
 
     if (currentStep < STEPS.length - 1) {

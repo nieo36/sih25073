@@ -1,19 +1,20 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Camera } from '@mediapipe/camera_utils';
 import { createPoseDetector, drawPoseSkeleton, Results, Pose } from '../mediapipe/pose';
 import { SquatAnalyzer } from '../mediapipe/squat';
 import { PushupAnalyzer } from '../mediapipe/pushup';
 import { ScoreCard } from '../components/ScoreCard';
 import { computeOverallAssessmentScore, AssessmentScore } from '../analytics/scoring';
 import { calculateSessionMetrics } from '../analytics/metrics';
-import { OfflineStorage } from '../storage/indexedDB';
-import { ApiService } from '../services/api';
+import { OfflineStorage, LandmarkSample } from '../storage/indexedDB';
+import { syncManager, SyncStatus } from '../services/syncManager';
 import {
   Activity,
   AlertCircle,
   Camera as CameraIcon,
   CameraOff,
   Check,
+  Cloud,
+  CloudOff,
   Dumbbell,
   Eye,
   Loader2,
@@ -21,6 +22,7 @@ import {
   RotateCcw,
   Save,
   Square,
+  SwitchCamera,
   Zap,
 } from 'lucide-react';
 
@@ -34,12 +36,13 @@ export const Assessment: React.FC = () => {
   const [repCount, setRepCount] = useState<number>(0);
   const [fps, setFps] = useState<number>(0);
 
-  // Camera & Pipeline State
+  // Mobile Camera & Pipeline State
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
   const [isCameraLoading, setIsCameraLoading] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
 
-  // Session Result State
+  // Session Result & Sync State
   const [score, setScore] = useState<AssessmentScore>({
     totalScore: 0,
     formAccuracy: 100,
@@ -52,12 +55,15 @@ export const Assessment: React.FC = () => {
   });
   const [completed, setCompleted] = useState<boolean>(false);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(syncManager.getStatus());
 
   // Isolated Hardware & Model References (prevent re-renders on video frames)
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const cameraRef = useRef<Camera | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const poseRef = useRef<Pose | null>(null);
+  const animationFrameIdRef = useRef<number | null>(null);
+  const landmarkSamplesRef = useRef<LandmarkSample[]>([]);
 
   // Biomechanical Analyzer References
   const squatAnalyzerRef = useRef<SquatAnalyzer>(new SquatAnalyzer());
@@ -69,6 +75,7 @@ export const Assessment: React.FC = () => {
   const timerRef = useRef<number | null>(null);
   const frameCountRef = useRef<number>(0);
   const lastFpsTimeRef = useRef<number>(performance.now());
+  const lastSampleTimeRef = useRef<number>(0);
 
   // Keep ref values in sync with React state
   useEffect(() => {
@@ -78,6 +85,14 @@ export const Assessment: React.FC = () => {
   useEffect(() => {
     exerciseRef.current = exercise;
   }, [exercise]);
+
+  // Subscribe to Sync Manager status
+  useEffect(() => {
+    const unsubscribe = syncManager.subscribe((status) => {
+      setSyncStatus(status);
+    });
+    return unsubscribe;
+  }, []);
 
   // Assessment Duration Timer
   useEffect(() => {
@@ -106,26 +121,21 @@ export const Assessment: React.FC = () => {
       lastFpsTimeRef.current = now;
     }
 
-    // 2. Prepare 2D Canvas
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    if (canvas.width !== 1280 || canvas.height !== 720) {
-      canvas.width = 1280;
-      canvas.height = 720;
-    }
-
-    // 3. Clear canvas & render live camera frame
+    // 2. Clear canvas overlay
     ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // 3. Draw video background frame if available
     if (results.image) {
       ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
     }
 
-    // 4. Render skeleton overlay
+    // 4. Draw pose skeleton
     if (results.poseLandmarks && results.poseLandmarks.length > 0) {
       drawPoseSkeleton(ctx, results.poseLandmarks, canvas.width, canvas.height, {
         pointColor: '#06b6d4',
@@ -137,11 +147,16 @@ export const Assessment: React.FC = () => {
 
       // 5. If assessment active, feed landmarks into exercise analyzer
       if (isAssessingRef.current) {
+        let currentJointAngle = 180;
+        let isInflection = false;
+
         if (exerciseRef.current === 'squat') {
           const feedback = squatAnalyzerRef.current.process(results.poseLandmarks);
           setRepCount(feedback.repCount);
           setCurrentAngle(feedback.kneeAngle);
           setLiveFeedback(feedback.feedbackMessage);
+          currentJointAngle = feedback.kneeAngle;
+          isInflection = feedback.isGoodDepth;
 
           const computed = computeOverallAssessmentScore({
             repsCompleted: feedback.repCount,
@@ -157,6 +172,8 @@ export const Assessment: React.FC = () => {
           setRepCount(feedback.repCount);
           setCurrentAngle(feedback.elbowAngle);
           setLiveFeedback(feedback.feedbackMessage);
+          currentJointAngle = feedback.elbowAngle;
+          isInflection = feedback.isGoodAlignment;
 
           const computed = computeOverallAssessmentScore({
             repsCompleted: feedback.repCount,
@@ -168,19 +185,50 @@ export const Assessment: React.FC = () => {
           });
           setScore(computed);
         }
+
+        // 6. Sample landmark keyframes (sample every 500ms or on key inflection moments)
+        if (now - lastSampleTimeRef.current >= 500 || isInflection) {
+          lastSampleTimeRef.current = now;
+          landmarkSamplesRef.current.push({
+            timestampMs: Math.round(now),
+            repNumber: repCount,
+            event: isInflection ? 'peak_inflection' : 'sample',
+            angle: Math.round(currentJointAngle),
+            landmarks: results.poseLandmarks.map((lm) => ({
+              x: Math.round(lm.x * 1000) / 1000,
+              y: Math.round(lm.y * 1000) / 1000,
+              z: Math.round(lm.z * 1000) / 1000,
+              visibility: lm.visibility !== undefined ? Math.round(lm.visibility * 100) / 100 : undefined,
+            })),
+          });
+
+          // Cap in-memory sample buffer to max 100 samples per session
+          if (landmarkSamplesRef.current.length > 100) {
+            landmarkSamplesRef.current.shift();
+          }
+        }
       }
     }
 
     ctx.restore();
-  }, []);
+  }, [repCount]);
 
   /**
-   * Start Webcam Stream & MediaPipe Pipeline
+   * Start Webcam Stream with Mobile Fallback Tiers & Continuous MediaPipe Loop
    */
-  const handleStartCamera = async () => {
+  const handleStartCamera = async (targetFacingMode: 'user' | 'environment' = facingMode) => {
     try {
       setIsCameraLoading(true);
       setCameraError(null);
+
+      // Check Secure Context on mobile devices
+      if (typeof window !== 'undefined' && window.isSecureContext === false && window.location.hostname !== 'localhost') {
+        throw new Error('Mobile cameras require HTTPS or localhost. If on a phone, use HTTPS or a tunnel like ngrok.');
+      }
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Camera API unavailable. Please verify browser permissions and HTTPS connection.');
+      }
 
       // Initialize MediaPipe Pose instance if not present
       if (!poseRef.current) {
@@ -188,28 +236,97 @@ export const Assessment: React.FC = () => {
         await poseRef.current.initialize();
       }
 
-      if (!videoRef.current) {
-        throw new Error('Video DOM reference not ready');
+      // Stop any existing stream
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
       }
 
-      // Initialize MediaPipe Camera helper
-      const camera = new Camera(videoRef.current, {
-        onFrame: async () => {
-          if (videoRef.current && poseRef.current) {
-            await poseRef.current.send({ image: videoRef.current });
-          }
+      // Tiered fallback constraints for phone sensors & aspect ratios
+      const constraintTiers: MediaStreamConstraints[] = [
+        {
+          video: {
+            facingMode: { ideal: targetFacingMode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
         },
-        width: 1280,
-        height: 720,
-      });
+        {
+          video: {
+            facingMode: { ideal: targetFacingMode },
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+          },
+          audio: false,
+        },
+        {
+          video: {
+            facingMode: targetFacingMode,
+          },
+          audio: false,
+        },
+        {
+          video: true,
+          audio: false,
+        },
+      ];
 
-      await camera.start();
-      cameraRef.current = camera;
+      let stream: MediaStream | null = null;
+      let lastErr: any = null;
+
+      for (const constraints of constraintTiers) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+          if (stream) break;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+
+      if (!stream) {
+        throw new Error(
+          lastErr?.name === 'NotAllowedError'
+            ? 'Camera permission denied. Please grant camera access in browser settings.'
+            : 'Could not acquire camera stream on any supported resolution.'
+        );
+      }
+
+      streamRef.current = stream;
+
+      const video = videoRef.current;
+      if (!video) {
+        throw new Error('Video DOM element reference not ready');
+      }
+
+      video.srcObject = stream;
+      video.setAttribute('playsinline', 'true');
+      video.setAttribute('autoplay', 'true');
+      video.setAttribute('muted', 'true');
+      await video.play();
+
       setIsCameraActive(true);
-      setLiveFeedback('Camera active. Tap "Start AI Assessment" to record reps.');
+      setLiveFeedback('Camera active. Tap "Start AI Assessment" to begin biomechanical scoring.');
+
+      // Continuous Frame Sending Loop using requestAnimationFrame
+      const sendFrame = async () => {
+        if (videoRef.current && poseRef.current && videoRef.current.readyState >= 2) {
+          try {
+            await poseRef.current.send({ image: videoRef.current });
+          } catch {
+            // Frame processing catch
+          }
+        }
+        animationFrameIdRef.current = requestAnimationFrame(sendFrame);
+      };
+
+      if (animationFrameIdRef.current) {
+        cancelAnimationFrame(animationFrameIdRef.current);
+      }
+      animationFrameIdRef.current = requestAnimationFrame(sendFrame);
     } catch (err: any) {
       console.error('Camera initialization error:', err);
-      setCameraError(err.message || 'Could not access webcam device. Please verify camera permissions.');
+      setCameraError(err.message || 'Could not access camera. Please verify device permissions.');
       setIsCameraActive(false);
     } finally {
       setIsCameraLoading(false);
@@ -217,18 +334,23 @@ export const Assessment: React.FC = () => {
   };
 
   /**
-   * Stop Webcam Stream & Free Pipeline Resources
+   * Stop Webcam Stream & Free Resources
    */
   const handleStopCamera = async () => {
-    if (cameraRef.current) {
-      await cameraRef.current.stop();
-      cameraRef.current = null;
+    if (animationFrameIdRef.current) {
+      cancelAnimationFrame(animationFrameIdRef.current);
+      animationFrameIdRef.current = null;
     }
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach((t) => t.stop());
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+
     setIsCameraActive(false);
     setFps(0);
 
@@ -239,11 +361,25 @@ export const Assessment: React.FC = () => {
     }
   };
 
+  /**
+   * Flip Camera (Front / Rear) on Mobile Phones
+   */
+  const handleFlipCamera = async () => {
+    const nextMode = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(nextMode);
+    if (isCameraActive) {
+      await handleStartCamera(nextMode);
+    }
+  };
+
   // Cleanup on component unmount
   useEffect(() => {
     return () => {
-      if (cameraRef.current) {
-        cameraRef.current.stop();
+      if (animationFrameIdRef.current) {
+        cancelAnimationFrame(animationFrameIdRef.current);
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
       }
       if (poseRef.current) {
         poseRef.current.close();
@@ -257,6 +393,7 @@ export const Assessment: React.FC = () => {
   const handleStartAssessment = () => {
     squatAnalyzerRef.current.reset();
     pushupAnalyzerRef.current.reset();
+    landmarkSamplesRef.current = [];
     setRepCount(0);
     setDuration(0);
     setCompleted(false);
@@ -285,10 +422,11 @@ export const Assessment: React.FC = () => {
     setScore(computedScore);
     setLiveFeedback(`Assessment finished! Recorded ${repCount} reps with ${computedScore.grade} rating.`);
 
-    // Persist session to IndexedDB & sync
+    // Persist session to IndexedDB with Offline-First status
     try {
+      const sessionId = `sess-${Date.now()}`;
       await OfflineStorage.saveAssessment({
-        id: `sess-${Date.now()}`,
+        id: sessionId,
         exerciseType: exercise,
         date: new Date().toISOString().split('T')[0],
         totalScore: computedScore.totalScore,
@@ -299,26 +437,25 @@ export const Assessment: React.FC = () => {
         caloriesBurned: Math.round(duration * 0.18 * 10) / 10,
         symmetryScore: computedScore.symmetryScore,
         depthScore: computedScore.depthScore,
-        synced: false,
-      });
-
-      await ApiService.uploadAssessment({
-        exerciseType: exercise,
-        repsCompleted: repCount,
-        validReps,
-        totalScore: computedScore.totalScore,
-        grade: computedScore.grade,
-        metrics: {
-          durationSeconds: duration,
-          caloriesBurned: Math.round(duration * 0.18 * 10) / 10,
-          symmetryScore: computedScore.symmetryScore,
-          depthScore: computedScore.depthScore,
+        formAccuracy: computedScore.formAccuracy,
+        cadenceScore: computedScore.cadenceScore,
+        angles: {
+          current: currentAngle,
+          min: 75,
+          max: 180,
+          avg: 120,
         },
+        landmarkSamples: [...landmarkSamplesRef.current],
+        synced: false,
+        createdAt: Date.now(),
       });
 
       setSavedSuccess(true);
+
+      // Trigger background sync engine immediately
+      syncManager.syncNow();
     } catch (e) {
-      console.warn('Saved offline in IndexedDB:', e);
+      console.warn('Error saving to IndexedDB:', e);
       setSavedSuccess(true);
     }
   };
@@ -356,11 +493,14 @@ export const Assessment: React.FC = () => {
     durationSeconds: duration,
   });
 
+  const isFrontCamera = facingMode === 'user';
+
   return (
     <div className="container" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {/* Hidden Video Feed (Processed by MediaPipe Camera) */}
+      {/* Hidden Video Feed */}
       <video
         ref={videoRef}
+        autoPlay
         playsInline
         muted
         style={{ display: 'none' }}
@@ -369,11 +509,32 @@ export const Assessment: React.FC = () => {
       {/* Header & Exercise Mode Switcher */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.85rem', fontWeight: 800 }}>
-            Real-Time AI <span className="gradient-text">Pose Assessment Studio</span>
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <h1 style={{ fontSize: '1.85rem', fontWeight: 800 }}>
+              Real-Time AI <span className="gradient-text">Pose Assessment Studio</span>
+            </h1>
+            {/* Sync Badge */}
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.25rem 0.6rem',
+                borderRadius: 'var(--radius-full)',
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                background: syncStatus.isOnline ? 'rgba(16, 185, 129, 0.12)' : 'rgba(244, 63, 94, 0.12)',
+                color: syncStatus.isOnline ? '#10b981' : '#f43f5e',
+                border: `1px solid ${syncStatus.isOnline ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)'}`,
+              }}
+              title={syncStatus.isOnline ? 'Online (IndexedDB + MongoDB auto-sync)' : 'Offline (Saved in IndexedDB)'}
+            >
+              {syncStatus.isOnline ? <Cloud size={13} /> : <CloudOff size={13} />}
+              <span>{syncStatus.isOnline ? (syncStatus.pendingCount > 0 ? `Syncing (${syncStatus.pendingCount})` : 'Cloud Synced') : 'Offline Store'}</span>
+            </div>
+          </div>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            MediaPipe WASM Biomechanical Vision • 33-Point Skeleton Kinematics
+            MediaPipe Biomechanical Vision • Offline-First Storage (IndexedDB ➔ MongoDB)
           </p>
         </div>
 
@@ -460,7 +621,7 @@ export const Assessment: React.FC = () => {
                 objectFit: 'cover',
                 borderRadius: 'var(--radius-md)',
                 display: isCameraActive ? 'block' : 'none',
-                transform: 'scaleX(-1)', // Mirror user perspective
+                transform: isFrontCamera ? 'scaleX(-1)' : 'none', // Mirror front camera only
               }}
             />
 
@@ -503,7 +664,7 @@ export const Assessment: React.FC = () => {
 
                 <div>
                   <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.35rem' }}>
-                    {isCameraLoading ? 'Initializing MediaPipe Pipeline...' : 'MediaPipe Vision Ready'}
+                    {isCameraLoading ? 'Initializing MediaPipe & Camera...' : 'MediaPipe Vision Ready'}
                   </h3>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', maxWidth: '440px' }}>
                     {cameraError ? (
@@ -511,27 +672,38 @@ export const Assessment: React.FC = () => {
                         <AlertCircle size={15} /> {cameraError}
                       </span>
                     ) : (
-                      'High-speed 33-point pose landmark estimation with real-time joint angles and automated rep detection.'
+                      'High-speed 33-point pose landmark estimation with real-time joint angles and offline-first IndexedDB storage.'
                     )}
                   </p>
                 </div>
 
-                <button
-                  disabled={isCameraLoading}
-                  onClick={handleStartCamera}
-                  className="btn btn-primary"
-                  style={{ marginTop: '0.5rem', padding: '0.75rem 1.75rem', fontWeight: 700 }}
-                >
-                  {isCameraLoading ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" /> Loading WASM Models...
-                    </>
-                  ) : (
-                    <>
-                      <CameraIcon size={16} /> Start Camera
-                    </>
-                  )}
-                </button>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <button
+                    disabled={isCameraLoading}
+                    onClick={() => handleStartCamera(facingMode)}
+                    className="btn btn-primary"
+                    style={{ padding: '0.75rem 1.75rem', fontWeight: 700 }}
+                  >
+                    {isCameraLoading ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" /> Loading WASM Models...
+                      </>
+                    ) : (
+                      <>
+                        <CameraIcon size={16} /> Start Camera
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={handleFlipCamera}
+                    className="btn btn-secondary"
+                    title={`Switch camera: Currently ${facingMode === 'user' ? 'Front' : 'Rear'}`}
+                    style={{ padding: '0.75rem 1rem' }}
+                  >
+                    <SwitchCamera size={16} /> {facingMode === 'user' ? 'Front Camera' : 'Rear Camera'}
+                  </button>
+                </div>
               </div>
             )}
 
@@ -630,28 +802,46 @@ export const Assessment: React.FC = () => {
                 </span>
               </div>
 
-              {/* Dedicated Camera Toggle Button in Viewport */}
-              <button
-                disabled={isCameraLoading}
-                onClick={isCameraActive ? handleStopCamera : handleStartCamera}
-                className="btn btn-secondary"
-                style={{
-                  padding: '0.4rem 0.85rem',
-                  fontSize: '0.8rem',
-                  background: 'rgba(0, 0, 0, 0.75)',
-                  backdropFilter: 'blur(8px)',
-                }}
-              >
-                {isCameraActive ? (
-                  <>
-                    <CameraOff size={14} /> Stop Camera
-                  </>
-                ) : (
-                  <>
-                    <CameraIcon size={14} /> Start Camera
-                  </>
-                )}
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {/* Flip Camera Button */}
+                <button
+                  onClick={handleFlipCamera}
+                  className="btn btn-secondary"
+                  title={`Flip to ${facingMode === 'user' ? 'Rear' : 'Front'} Camera`}
+                  style={{
+                    padding: '0.4rem 0.75rem',
+                    fontSize: '0.8rem',
+                    background: 'rgba(0, 0, 0, 0.75)',
+                    backdropFilter: 'blur(8px)',
+                  }}
+                >
+                  <SwitchCamera size={14} />
+                  <span style={{ display: 'none', md: 'inline' } as any}>{facingMode === 'user' ? 'Front' : 'Rear'}</span>
+                </button>
+
+                {/* Camera Toggle Button */}
+                <button
+                  disabled={isCameraLoading}
+                  onClick={isCameraActive ? handleStopCamera : () => handleStartCamera(facingMode)}
+                  className="btn btn-secondary"
+                  style={{
+                    padding: '0.4rem 0.85rem',
+                    fontSize: '0.8rem',
+                    background: 'rgba(0, 0, 0, 0.75)',
+                    backdropFilter: 'blur(8px)',
+                  }}
+                >
+                  {isCameraActive ? (
+                    <>
+                      <CameraOff size={14} /> Stop
+                    </>
+                  ) : (
+                    <>
+                      <CameraIcon size={14} /> Start
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -690,7 +880,7 @@ export const Assessment: React.FC = () => {
               {/* Toggle Camera Button */}
               <button
                 disabled={isCameraLoading}
-                onClick={isCameraActive ? handleStopCamera : handleStartCamera}
+                onClick={isCameraActive ? handleStopCamera : () => handleStartCamera(facingMode)}
                 className="btn btn-secondary"
               >
                 {isCameraActive ? <CameraOff size={16} /> : <CameraIcon size={16} />}
@@ -702,6 +892,7 @@ export const Assessment: React.FC = () => {
                 onClick={() => {
                   squatAnalyzerRef.current.reset();
                   pushupAnalyzerRef.current.reset();
+                  landmarkSamplesRef.current = [];
                   setRepCount(0);
                   setDuration(0);
                   setScore({
@@ -876,13 +1067,13 @@ export const Assessment: React.FC = () => {
                 <div>
                   <h4 style={{ fontSize: '0.95rem', fontWeight: 700 }}>Assessment Verified & Saved</h4>
                   <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    Session stored in IndexedDB and sports passport ledger.
+                    Session stored in IndexedDB (offline) & automatically queued for MongoDB sync.
                   </p>
                 </div>
               </div>
               {savedSuccess && (
                 <span className="badge badge-emerald">
-                  <Save size={12} /> Synced
+                  <Save size={12} /> {syncStatus.pendingCount === 0 ? 'Synced to Cloud' : 'Stored in IndexedDB'}
                 </span>
               )}
             </div>

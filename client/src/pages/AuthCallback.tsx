@@ -19,48 +19,74 @@ const T = {
 export const AuthCallback: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { handleOAuthSuccess } = useAuth();
+  const { handleOAuthSuccess, refreshSession } = useAuth();
   const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing');
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    const token = searchParams.get('token');
-    const email = searchParams.get('email');
-    const name = searchParams.get('name') || 'Athlete';
-    const role = searchParams.get('role') || 'user';
-    const id = searchParams.get('id') || `usr-${Date.now()}`;
-    const isEmailVerified = searchParams.get('isEmailVerified') === 'true';
-    const error = searchParams.get('error');
+    let isMounted = true;
+    let timer: NodeJS.Timeout;
 
-    if (error) {
-      setStatus('error');
-      setErrorMessage(decodeURIComponent(error));
-      return;
-    }
+    const processOAuth = async () => {
+      const token = searchParams.get('token');
+      const email = searchParams.get('email');
+      const name = searchParams.get('name') || 'Athlete';
+      const role = searchParams.get('role') || 'user';
+      const id = searchParams.get('id') || `usr-${Date.now()}`;
+      const isEmailVerified = searchParams.get('isEmailVerified') === 'true';
+      const error = searchParams.get('error');
 
-    if (token && email) {
-      try {
-        handleOAuthSuccess(token, {
-          id,
-          email: decodeURIComponent(email),
-          name: decodeURIComponent(name),
-          role,
-          isEmailVerified,
-        });
-        setStatus('success');
-        const timer = setTimeout(() => {
-          navigate('/dashboard', { replace: true });
-        }, 1200);
-        return () => clearTimeout(timer);
-      } catch (err: any) {
-        setStatus('error');
-        setErrorMessage(err?.message || 'Failed to process authentication');
+      if (error) {
+        if (isMounted) {
+          setStatus('error');
+          setErrorMessage(decodeURIComponent(error));
+        }
+        return;
       }
-    } else {
-      setStatus('error');
-      setErrorMessage('Missing authentication tokens in callback response.');
-    }
-  }, [searchParams, handleOAuthSuccess, navigate]);
+
+      if (token && email) {
+        try {
+          handleOAuthSuccess(token, {
+            id,
+            email: decodeURIComponent(email),
+            name: decodeURIComponent(name),
+            role,
+            isEmailVerified,
+          });
+          if (isMounted) {
+            setStatus('success');
+            timer = setTimeout(() => {
+              navigate('/dashboard', { replace: true });
+            }, 1200);
+          }
+        } catch (err: any) {
+          if (isMounted) {
+            setStatus('error');
+            setErrorMessage(err?.message || 'Failed to process authentication');
+          }
+        }
+      } else {
+        // Fallback: try refreshing session via httpOnly cookie set by OAuth callback
+        const refreshed = await refreshSession();
+        if (refreshed && isMounted) {
+          setStatus('success');
+          timer = setTimeout(() => {
+            navigate('/dashboard', { replace: true });
+          }, 1200);
+        } else if (isMounted) {
+          setStatus('error');
+          setErrorMessage('Missing authentication tokens in callback response.');
+        }
+      }
+    };
+
+    processOAuth();
+
+    return () => {
+      isMounted = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [searchParams, handleOAuthSuccess, refreshSession, navigate]);
 
   return (
     <div

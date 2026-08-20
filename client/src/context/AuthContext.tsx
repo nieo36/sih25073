@@ -25,6 +25,7 @@ interface AuthContextType {
   verify2FA: (code: string) => Promise<{ message: string; twoFactorAuth: boolean }>;
   refreshSession: () => Promise<boolean>;
   updateUser: (partialUser: Partial<AuthUser>) => void;
+  saveProfile: (payload: { name?: string; profile?: any; privacy?: any }) => Promise<{ message: string; user: AuthUser }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -95,21 +96,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let isMounted = true;
 
     const initializeAuth = async () => {
-      const storedToken = localStorage.getItem(TOKEN_KEY);
-      if (storedToken) {
-        // Try background token refresh
-        try {
-          const res = await AuthService.refreshToken();
-          if (isMounted && res.accessToken && res.user) {
-            setAuthData(res.accessToken, res.user);
-          }
-        } catch {
-          // If refresh fails but we have token in local storage, keep it unless expired
-          // or user explicitly logs out
+      try {
+        const res = await AuthService.refreshToken();
+        if (isMounted && res.accessToken && res.user) {
+          setAuthData(res.accessToken, res.user);
         }
-      }
-      if (isMounted) {
-        setIsLoading(false);
+      } catch {
+        // If refresh fails and token in storage is stale, clean up
+        const storedToken = localStorage.getItem(TOKEN_KEY);
+        if (!storedToken) {
+          setAuthData(null, null);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
@@ -135,6 +136,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       const res = await AuthService.register(payload);
+      if (res.accessToken && res.user) {
+        setAuthData(res.accessToken, res.user);
+      }
       return res;
     } finally {
       setIsLoading(false);
@@ -179,6 +183,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return res;
   };
 
+  const saveProfile = async (payload: { name?: string; profile?: any; privacy?: any }) => {
+    const res = await AuthService.updateProfile(payload);
+    if (res.user) {
+      updateUser(res.user);
+    }
+    return res;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -197,6 +209,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         verify2FA,
         refreshSession,
         updateUser,
+        saveProfile,
       }}
     >
       {children}

@@ -59,7 +59,24 @@ function checkAdmin(req, res, next) {
     next();
 }
 
+function requireVerified(req, res, next) {
+    if (!req.userInfo) {
+        return res.status(401).json({
+            message: "Not authenticated",
+        });
+    }
+
+    if (!req.userInfo.isEmailVerified) {
+        return res.status(403).json({
+            message: "Access denied: Please verify your email address to access this feature.",
+        });
+    }
+
+    next();
+}
+
 module.exports = {
     requireAuth,
     checkAdmin,
+    requireVerified,
 };
