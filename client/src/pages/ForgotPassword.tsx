@@ -108,7 +108,7 @@ export const ForgotPassword: React.FC = () => {
             textDecoration: 'none',
           }}
         >
-          VYOMA
+          KREEDAI
         </Link>
         <Link
           to="/login"
@@ -267,7 +267,7 @@ export const ForgotPassword: React.FC = () => {
                 >
                   {loading ? (
                     <>
-                      <Loader2 size={18} className="vyoma-spin" />
+                      <Loader2 size={18} className="kreedai-spin" />
                       Sending Link…
                     </>
                   ) : (
@@ -328,6 +328,16 @@ export const ForgotPassword: React.FC = () => {
           )}
         </div>
       </main>
+
+      <style>{`
+        @keyframes kreedaiSpin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+        .kreedai-spin {
+          animation: kreedaiSpin 1s linear infinite;
+        }
+      `}</style>
     </div>
   );
 };

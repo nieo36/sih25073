@@ -4,7 +4,7 @@ import { Eye, EyeOff, Mail, ChevronDown, Globe, CheckCircle2, AlertCircle, KeyRo
 import { useAuth } from '../context/AuthContext';
 
 /* ─────────────────────────────────────────────
-   VYOMA Login — Bauhaus V2 / Neo-Brutalist
+   KreedAI Login — Bauhaus V2 / Neo-Brutalist
    Stitch project 16542555991833173009
    ───────────────────────────────────────────── */
 
@@ -209,7 +209,7 @@ export const Login: React.FC = () => {
             color: T.primary,
           }}
         >
-          VYOMA
+          KREEDAI
         </div>
 
         {/* Language Selector */}
@@ -346,7 +346,7 @@ export const Login: React.FC = () => {
                 height: '200px',
                 display: 'none',  // hidden on mobile by default
               }}
-              className="vyoma-decor-desktop"
+              className="kreedai-decor-desktop"
             >
               <BauhausDecor />
             </div>
@@ -417,7 +417,7 @@ export const Login: React.FC = () => {
             <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
               {/* Email */}
               <div>
-                <label htmlFor="vyoma-email" style={labelStyle}>
+                <label htmlFor="kreedai-email" style={labelStyle}>
                   Email Address
                 </label>
                 <div style={{ position: 'relative' }}>
@@ -427,7 +427,7 @@ export const Login: React.FC = () => {
                     style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)' }}
                   />
                   <input
-                    id="vyoma-email"
+                    id="kreedai-email"
                     type="email"
                     placeholder="athlete@example.com"
                     value={email}
@@ -447,7 +447,7 @@ export const Login: React.FC = () => {
               {/* Password */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '0.25rem' }}>
-                  <label htmlFor="vyoma-password" style={{ ...labelStyle, marginBottom: 0 }}>
+                  <label htmlFor="kreedai-password" style={{ ...labelStyle, marginBottom: 0 }}>
                     Password
                   </label>
                   <Link
@@ -469,7 +469,7 @@ export const Login: React.FC = () => {
                 </div>
                 <div style={{ position: 'relative' }}>
                   <input
-                    id="vyoma-password"
+                    id="kreedai-password"
                     type={showPassword ? 'text' : 'password'}
                     placeholder="••••••••"
                     value={password}
@@ -508,7 +508,7 @@ export const Login: React.FC = () => {
               {/* 2FA Code Input (Conditional) */}
               {showTwoFactorInput && (
                 <div>
-                  <label htmlFor="vyoma-2fa" style={{ ...labelStyle, color: T.tertiary }}>
+                  <label htmlFor="kreedai-2fa" style={{ ...labelStyle, color: T.tertiary }}>
                     Two-Factor Authentication Code (2FA)
                   </label>
                   <div style={{ position: 'relative' }}>
@@ -518,7 +518,7 @@ export const Login: React.FC = () => {
                       style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)' }}
                     />
                     <input
-                      id="vyoma-2fa"
+                      id="kreedai-2fa"
                       type="text"
                       inputMode="numeric"
                       placeholder="6-digit Authenticator Code"
@@ -726,7 +726,7 @@ export const Login: React.FC = () => {
           }}
         >
           <span style={{ fontFamily: T.fontBody, fontSize: '0.95rem', marginBottom: '0.25rem' }}>
-            New to VYOMA?
+            New to KreedAI?
           </span>
           <span
             style={{
@@ -770,7 +770,7 @@ export const Login: React.FC = () => {
       {/* ── Responsive style inject ───────────────── */}
       <style>{`
         @media (min-width: 900px) {
-          .vyoma-decor-desktop { display: block !important; }
+          .kreedai-decor-desktop { display: block !important; }
         }
       `}</style>
     </div>

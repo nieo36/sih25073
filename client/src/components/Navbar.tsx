@@ -69,11 +69,11 @@ export const Navbar: React.FC = () => {
             <Activity size={22} color="#fff" />
           </div>
           <div>
-            <span style={{ fontSize: '1.2rem', fontWeight: 800, letterSpacing: '-0.02em' }}>
-              ATHLETE<span className="gradient-text">PULSE</span>
+            <span style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '-0.03em', fontFamily: "'Space Grotesk', sans-serif" }}>
+              KREED<span className="gradient-text">AI</span>
             </span>
-            <div style={{ fontSize: '0.68rem', color: 'var(--accent-cyan)', fontWeight: 600, letterSpacing: '0.08em' }}>
-              AI POSE ENGINE v2.0
+            <div style={{ fontSize: '0.68rem', color: 'var(--accent-cyan)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              Elite AI Performance
             </div>
           </div>
         </Link>

@@ -8,7 +8,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 /* ─────────────────────────────────────────────
-   VYOMA Register — Athlete Onboarding
+   KreedAI Register — Athlete Onboarding
    Magic Link Email Verification at the end
    (Auto-verifies in 10s for demo testing)
    Stitch project 16542555991833173009
@@ -507,7 +507,7 @@ export const Register: React.FC = () => {
               color: T.primary,
             }}
           >
-            VYOMA
+            KREEDAI
           </h1>
         </div>
 
@@ -612,7 +612,7 @@ export const Register: React.FC = () => {
 
           {/* ── Desktop Stepper ───────────────── */}
           <div
-            className="vyoma-stepper-desktop"
+            className="kreedai-stepper-desktop"
             style={{
               display: 'none',
               justifyContent: 'center',
@@ -643,7 +643,7 @@ export const Register: React.FC = () => {
                 }}
               >
                 {i < currentStep ? <Check size={13} /> : <span>{String(i + 1).padStart(2, '0')}</span>}
-                <span className="vyoma-step-label">{s.label}</span>
+                <span className="kreedai-step-label">{s.label}</span>
               </button>
             ))}
           </div>
@@ -658,10 +658,10 @@ export const Register: React.FC = () => {
               padding: '1.5rem 0 2rem',
               alignItems: 'start',
             }}
-            className="vyoma-content-grid"
+            className="kreedai-content-grid"
           >
             {/* Left column: headline (desktop only) */}
-            <div className="vyoma-hero-col" style={{ display: 'none' }}>
+            <div className="kreedai-hero-col" style={{ display: 'none' }}>
               <div style={{ position: 'sticky', top: '120px' }}>
                 <span
                   style={{
@@ -761,7 +761,7 @@ export const Register: React.FC = () => {
             {/* Right column: form */}
             <div>
               {/* Mobile headline */}
-              <div className="vyoma-mobile-hero" style={{ marginBottom: '1.5rem' }}>
+              <div className="kreedai-mobile-hero" style={{ marginBottom: '1.5rem' }}>
                 <h2
                   style={{
                     fontFamily: T.fontHeadline,
@@ -1502,7 +1502,7 @@ export const Register: React.FC = () => {
                             Verified Successfully! ✓
                           </h3>
                           <p style={{ fontSize: '0.95rem', color: T.onSurfaceVariant, marginTop: '0.5rem' }}>
-                            Your email has been confirmed. Your VYOMA Sports Passport is now active.
+                            Your email has been confirmed. Your KreedAI Sports Passport is now active.
                           </p>
                         </>
                       ) : (
@@ -1553,7 +1553,7 @@ export const Register: React.FC = () => {
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
-                          <Loader2 size={18} color={T.tertiary} className="vyoma-spin" />
+                          <Loader2 size={18} color={T.tertiary} className="kreedai-spin" />
                           <span style={{ fontFamily: T.fontHeadline, fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase' }}>
                             Waiting for link confirmation...
                           </span>
@@ -1757,7 +1757,7 @@ export const Register: React.FC = () => {
                   >
                     {submitting ? (
                       <>
-                        <Loader2 size={20} className="vyoma-spin" />
+                        <Loader2 size={20} className="kreedai-spin" />
                         Creating Account…
                       </>
                     ) : (
@@ -1827,21 +1827,21 @@ export const Register: React.FC = () => {
 
       {/* Responsive and Animation Styles */}
       <style>{`
-        @keyframes vyomaSpin {
+        @keyframes kreedaiSpin {
           from { transform: rotate(0deg); }
           to   { transform: rotate(360deg); }
         }
-        .vyoma-spin {
-          animation: vyomaSpin 1.5s linear infinite;
+        .kreedai-spin {
+          animation: kreedaiSpin 1.5s linear infinite;
         }
         @media (min-width: 900px) {
-          .vyoma-stepper-desktop { display: flex !important; }
-          .vyoma-content-grid { grid-template-columns: 5fr 7fr !important; }
-          .vyoma-hero-col { display: block !important; }
-          .vyoma-mobile-hero { display: none !important; }
+          .kreedai-stepper-desktop { display: flex !important; }
+          .kreedai-content-grid { grid-template-columns: 5fr 7fr !important; }
+          .kreedai-hero-col { display: block !important; }
+          .kreedai-mobile-hero { display: none !important; }
         }
         @media (max-width: 899px) {
-          .vyoma-step-label { display: none; }
+          .kreedai-step-label { display: none; }
         }
       `}</style>
     </div>
