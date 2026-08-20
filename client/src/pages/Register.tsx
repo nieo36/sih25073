@@ -5,9 +5,10 @@ import {
   Globe, User, Camera, Trophy, Shield, Lock, Award, Mail,
   RefreshCw, Sparkles, CheckCircle2, Send, ExternalLink, Loader2,
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 /* ─────────────────────────────────────────────
-   VYOMA Register — Athlete Onboarding
+   KreedAI Register — Athlete Onboarding
    Magic Link Email Verification at the end
    (Auto-verifies in 10s for demo testing)
    Stitch project 16542555991833173009
@@ -133,11 +134,6 @@ const GoogleIcon = () => (
   </svg>
 );
 
-const AppleIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.62-1.487 3.605-2.937 1.15-1.685 1.62-3.32 1.638-3.406-.035-.015-3.187-1.222-3.218-4.85-.026-3.04 2.484-4.5 2.59-4.56-1.428-2.09-3.619-2.37-4.39-2.415-1.921-.131-3.774 1.104-4.511 1.104zm1.516-3.668c.84-1.025 1.405-2.454 1.252-3.882-1.226.049-2.736.818-3.61 1.854-.783.916-1.455 2.38-1.272 3.777 1.378.107 2.784-.717 3.63-1.749z" />
-  </svg>
-);
 
 // ── Shared styles ──────────────────────
 const neoLabel: React.CSSProperties = {
@@ -231,7 +227,9 @@ export const Register: React.FC = () => {
   const [langOpen, setLangOpen] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [profilePhotoPreview, setProfilePhotoPreview] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { register: registerUser, loginWithGoogle, saveProfile } = useAuth();
 
   // ── Magic Link Email Verification State ──────────
   const [isEmailVerified, setIsEmailVerified] = useState(false);
@@ -301,8 +299,94 @@ export const Register: React.FC = () => {
     return Object.keys(errs).length === 0;
   };
 
-  const next = () => {
+  const next = async () => {
     if (!validateStep()) return;
+
+    if (currentStep === 0) {
+      setSubmitting(true);
+      try {
+        await registerUser({
+          name: formData.fullName.trim(),
+          email: formData.email.trim(),
+          password: formData.password,
+          profile: {
+            age: formData.age ? Number(formData.age) : undefined,
+            gender: formData.gender,
+            height: formData.height,
+            weight: formData.weight,
+            country: formData.country,
+            state: formData.state,
+            city: formData.city,
+            areaType: formData.areaType,
+            primarySport: formData.primarySport,
+            secondarySports: formData.secondarySports,
+            experienceLevel: formData.experienceLevel,
+            yearsExperience: formData.yearsExperience,
+            athleticGoals: formData.athleticGoals,
+            dominantHand: formData.dominantHand,
+            dominantFoot: formData.dominantFoot,
+            organization: formData.organization,
+            achievements: formData.achievements,
+            bio: formData.bio,
+            trainingFrequency: formData.trainingFrequency,
+          },
+          privacy: {
+            movementInsights: formData.movementInsights,
+            highlightProcessing: formData.highlightProcessing,
+            recruiterDiscoverability: formData.recruiterDiscoverability,
+            profileVisibility: formData.profileVisibility,
+            guardianConsent: formData.guardianConsent,
+          },
+        });
+      } catch (err: any) {
+        const msg = err?.message || 'Registration failed';
+        if (
+          msg.toLowerCase().includes('already in use') ||
+          msg.toLowerCase().includes('duplicate') ||
+          err?.status === 409
+        ) {
+          setErrors({ email: 'This email is already registered. Please sign in or use another email.' });
+        } else {
+          setErrors({ email: msg });
+        }
+        setSubmitting(false);
+        return;
+      }
+      setSubmitting(false);
+    }
+
+    if (currentStep > 0 && currentStep < STEPS.length - 1) {
+      saveProfile({
+        profile: {
+          age: formData.age ? Number(formData.age) : undefined,
+          gender: formData.gender,
+          height: formData.height,
+          weight: formData.weight,
+          country: formData.country,
+          state: formData.state,
+          city: formData.city,
+          areaType: formData.areaType,
+          primarySport: formData.primarySport,
+          secondarySports: formData.secondarySports,
+          experienceLevel: formData.experienceLevel,
+          yearsExperience: formData.yearsExperience,
+          athleticGoals: formData.athleticGoals,
+          dominantHand: formData.dominantHand,
+          dominantFoot: formData.dominantFoot,
+          organization: formData.organization,
+          achievements: formData.achievements,
+          bio: formData.bio,
+          trainingFrequency: formData.trainingFrequency,
+        },
+        privacy: {
+          movementInsights: formData.movementInsights,
+          highlightProcessing: formData.highlightProcessing,
+          recruiterDiscoverability: formData.recruiterDiscoverability,
+          profileVisibility: formData.profileVisibility,
+          guardianConsent: formData.guardianConsent,
+        },
+      }).catch(() => {});
+    }
 
     if (currentStep < STEPS.length - 1) {
       const nextStep = currentStep + 1;
@@ -423,7 +507,7 @@ export const Register: React.FC = () => {
               color: T.primary,
             }}
           >
-            VYOMA
+            KREEDAI
           </h1>
         </div>
 
@@ -528,7 +612,7 @@ export const Register: React.FC = () => {
 
           {/* ── Desktop Stepper ───────────────── */}
           <div
-            className="vyoma-stepper-desktop"
+            className="kreedai-stepper-desktop"
             style={{
               display: 'none',
               justifyContent: 'center',
@@ -559,7 +643,7 @@ export const Register: React.FC = () => {
                 }}
               >
                 {i < currentStep ? <Check size={13} /> : <span>{String(i + 1).padStart(2, '0')}</span>}
-                <span className="vyoma-step-label">{s.label}</span>
+                <span className="kreedai-step-label">{s.label}</span>
               </button>
             ))}
           </div>
@@ -574,10 +658,10 @@ export const Register: React.FC = () => {
               padding: '1.5rem 0 2rem',
               alignItems: 'start',
             }}
-            className="vyoma-content-grid"
+            className="kreedai-content-grid"
           >
             {/* Left column: headline (desktop only) */}
-            <div className="vyoma-hero-col" style={{ display: 'none' }}>
+            <div className="kreedai-hero-col" style={{ display: 'none' }}>
               <div style={{ position: 'sticky', top: '120px' }}>
                 <span
                   style={{
@@ -677,7 +761,7 @@ export const Register: React.FC = () => {
             {/* Right column: form */}
             <div>
               {/* Mobile headline */}
-              <div className="vyoma-mobile-hero" style={{ marginBottom: '1.5rem' }}>
+              <div className="kreedai-mobile-hero" style={{ marginBottom: '1.5rem' }}>
                 <h2
                   style={{
                     fontFamily: T.fontHeadline,
@@ -791,26 +875,23 @@ export const Register: React.FC = () => {
                       <div style={{ flex: 1, height: '2px', background: T.primary }} />
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '0.75rem' }}>
-                      {[
-                        { icon: <GoogleIcon />, label: 'Google' },
-                        { icon: <AppleIcon />, label: 'Apple' },
-                      ].map(({ icon, label }) => (
-                        <button key={label} type="button" onClick={() => {}}
-                          style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
-                            background: T.surface, border: T.border4, padding: '0.9rem',
-                            fontFamily: T.fontHeadline, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.85rem',
-                            color: T.primary, boxShadow: T.shadow4, cursor: 'pointer', transition: 'all 0.1s',
-                          }}
-                          onMouseEnter={(e) => { e.currentTarget.style.background = T.primary; e.currentTarget.style.color = T.surface; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = T.surface; e.currentTarget.style.color = T.primary; }}
-                          onMouseDown={(e) => { e.currentTarget.style.transform = 'translate(4px,4px)'; e.currentTarget.style.boxShadow = 'none'; }}
-                          onMouseUp={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = T.shadow4; }}
-                        >
-                          {icon} {label}
-                        </button>
-                      ))}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
+                      <button
+                        type="button"
+                        onClick={loginWithGoogle}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                          background: T.surface, border: T.border4, padding: '0.9rem',
+                          fontFamily: T.fontHeadline, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.85rem',
+                          color: T.primary, boxShadow: T.shadow4, cursor: 'pointer', transition: 'all 0.1s',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = T.primary; e.currentTarget.style.color = T.surface; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = T.surface; e.currentTarget.style.color = T.primary; }}
+                        onMouseDown={(e) => { e.currentTarget.style.transform = 'translate(4px,4px)'; e.currentTarget.style.boxShadow = 'none'; }}
+                        onMouseUp={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = T.shadow4; }}
+                      >
+                        <GoogleIcon /> Continue with Google
+                      </button>
                     </div>
                   </div>
                 )}
@@ -1421,7 +1502,7 @@ export const Register: React.FC = () => {
                             Verified Successfully! ✓
                           </h3>
                           <p style={{ fontSize: '0.95rem', color: T.onSurfaceVariant, marginTop: '0.5rem' }}>
-                            Your email has been confirmed. Your VYOMA Sports Passport is now active.
+                            Your email has been confirmed. Your KreedAI Sports Passport is now active.
                           </p>
                         </>
                       ) : (
@@ -1472,7 +1553,7 @@ export const Register: React.FC = () => {
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
-                          <Loader2 size={18} color={T.tertiary} className="vyoma-spin" />
+                          <Loader2 size={18} color={T.tertiary} className="kreedai-spin" />
                           <span style={{ fontFamily: T.fontHeadline, fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase' }}>
                             Waiting for link confirmation...
                           </span>
@@ -1639,30 +1720,52 @@ export const Register: React.FC = () => {
                   <button
                     type="button"
                     onClick={next}
-                    style={neoCTA}
+                    disabled={submitting}
+                    style={{
+                      ...neoCTA,
+                      opacity: submitting ? 0.7 : 1,
+                      cursor: submitting ? 'wait' : 'pointer',
+                    }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = T.primary;
-                      e.currentTarget.style.color = T.surfaceLowest;
-                      e.currentTarget.style.transform = 'translate(-4px, -4px)';
-                      e.currentTarget.style.boxShadow = '12px 12px 0px 0px rgba(26,26,26,1)';
+                      if (!submitting) {
+                        e.currentTarget.style.background = T.primary;
+                        e.currentTarget.style.color = T.surfaceLowest;
+                        e.currentTarget.style.transform = 'translate(-4px, -4px)';
+                        e.currentTarget.style.boxShadow = '12px 12px 0px 0px rgba(26,26,26,1)';
+                      }
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.background = T.primaryContainer;
-                      e.currentTarget.style.color = T.primary;
-                      e.currentTarget.style.transform = 'none';
-                      e.currentTarget.style.boxShadow = T.shadow8;
+                      if (!submitting) {
+                        e.currentTarget.style.background = T.primaryContainer;
+                        e.currentTarget.style.color = T.primary;
+                        e.currentTarget.style.transform = 'none';
+                        e.currentTarget.style.boxShadow = T.shadow8;
+                      }
                     }}
                     onMouseDown={(e) => {
-                      e.currentTarget.style.transform = 'translate(4px, 4px)';
-                      e.currentTarget.style.boxShadow = '2px 2px 0px 0px rgba(26,26,26,1)';
+                      if (!submitting) {
+                        e.currentTarget.style.transform = 'translate(4px, 4px)';
+                        e.currentTarget.style.boxShadow = '2px 2px 0px 0px rgba(26,26,26,1)';
+                      }
                     }}
                     onMouseUp={(e) => {
-                      e.currentTarget.style.transform = 'translate(-4px, -4px)';
-                      e.currentTarget.style.boxShadow = '12px 12px 0px 0px rgba(26,26,26,1)';
+                      if (!submitting) {
+                        e.currentTarget.style.transform = 'translate(-4px, -4px)';
+                        e.currentTarget.style.boxShadow = '12px 12px 0px 0px rgba(26,26,26,1)';
+                      }
                     }}
                   >
-                    {currentStep === 4 ? 'Continue to Email Verification' : 'Continue'}
-                    <ArrowRight size={20} />
+                    {submitting ? (
+                      <>
+                        <Loader2 size={20} className="kreedai-spin" />
+                        Creating Account…
+                      </>
+                    ) : (
+                      <>
+                        {currentStep === 4 ? 'Continue to Email Verification' : 'Continue'}
+                        <ArrowRight size={20} />
+                      </>
+                    )}
                   </button>
                 )}
 
@@ -1724,21 +1827,21 @@ export const Register: React.FC = () => {
 
       {/* Responsive and Animation Styles */}
       <style>{`
-        @keyframes vyomaSpin {
+        @keyframes kreedaiSpin {
           from { transform: rotate(0deg); }
           to   { transform: rotate(360deg); }
         }
-        .vyoma-spin {
-          animation: vyomaSpin 1.5s linear infinite;
+        .kreedai-spin {
+          animation: kreedaiSpin 1.5s linear infinite;
         }
         @media (min-width: 900px) {
-          .vyoma-stepper-desktop { display: flex !important; }
-          .vyoma-content-grid { grid-template-columns: 5fr 7fr !important; }
-          .vyoma-hero-col { display: block !important; }
-          .vyoma-mobile-hero { display: none !important; }
+          .kreedai-stepper-desktop { display: flex !important; }
+          .kreedai-content-grid { grid-template-columns: 5fr 7fr !important; }
+          .kreedai-hero-col { display: block !important; }
+          .kreedai-mobile-hero { display: none !important; }
         }
         @media (max-width: 899px) {
-          .vyoma-step-label { display: none; }
+          .kreedai-step-label { display: none; }
         }
       `}</style>
     </div>
