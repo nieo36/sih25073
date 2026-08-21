@@ -1,31 +1,23 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Activity, 
   ArrowRight, 
   Award, 
   CheckCircle2, 
-  Flame, 
   Play, 
   ShieldCheck, 
   TrendingUp, 
   Zap, 
   Brain, 
-  Lightbulb, 
   Target, 
   ChevronRight, 
-  Dumbbell, 
-  Sparkles,
-  Lock,
-  Medal,
-  Timer
+  Dumbbell
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { ProgressChart } from '../components/ProgressChart';
-import { Leaderboard } from '../components/Leaderboard';
 import { OfflineStorage } from '../storage/indexedDB';
+import { ApiService, AthleteStatsResponse } from '../services/api';
 
-// ── Scoped Neo-Brutalist / Bauhaus Theme Tokens (from Stitch 16542555991833173009) ──────
 const T = {
   bg: '#f5f0e8',
   surface: '#f5f0e8',
@@ -35,10 +27,10 @@ const T = {
   surfaceContainer: '#eee9e0',
   surfaceContainerLow: '#f2ede5',
   primary: '#1a1a1a',
-  primaryContainer: '#ffcc00', // Bold Electric Yellow
-  tertiary: '#0055ff',        // Cobalt Blue
+  primaryContainer: '#ffcc00',
+  tertiary: '#0055ff',
   tertiaryContainer: '#d6e3ff',
-  secondary: '#e63b2e',       // Energy Crimson
+  secondary: '#e63b2e',
   secondaryContainer: '#ffdad6',
   onSurface: '#1a1a1a',
   onSurfaceVariant: '#4a4a4a',
@@ -55,21 +47,33 @@ const T = {
 
 export const Dashboard: React.FC = () => {
   const { user } = useAuth();
-  const [assessments, setAssessments] = React.useState<any[]>([]);
+  const [assessments, setAssessments] = useState<any[]>([]);
+  const [serverStats, setServerStats] = useState<AthleteStatsResponse | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
+    // Load both local indexedDB and live backend stats
     OfflineStorage.getAllAssessments().then(setAssessments).catch(() => {});
-  }, []);
+    ApiService.getAthleteStats().then((data) => {
+      if (data) setServerStats(data);
+    }).catch(() => {});
+  }, [user]);
 
   const athleteName = user?.name || 'Aarav Sharma';
   const firstName = athleteName.split(' ')[0];
   const primarySport = user?.profile?.primarySport || 'Athletics';
   const userPhoto = user?.profile?.profilePhoto || user?.profilePhoto || user?.avatar;
 
-  const hasAssessments = assessments.length > 0;
-  const computedScore = hasAssessments
-    ? Math.round(assessments.reduce((acc, a) => acc + (a.totalScore || 0), 0) / assessments.length)
-    : 82;
+  const hasAssessments = assessments.length > 0 || (serverStats && serverStats.completedCount > 0);
+
+  const overallScore = hasAssessments
+    ? (serverStats?.overallScore ?? Math.round(assessments.reduce((acc, a) => acc + (a.totalScore || 0), 0) / assessments.length))
+    : 0;
+
+  const speedScore = hasAssessments ? (serverStats?.metrics?.speed ?? 0) : 0;
+  const agilityScore = hasAssessments ? (serverStats?.metrics?.agility ?? 0) : 0;
+  const formAccuracy = hasAssessments ? (serverStats?.metrics?.formPrecision ?? 0) : 0;
+  const eloRating = hasAssessments ? (serverStats?.eloRating ?? 0) : 0;
+  const tier = hasAssessments ? (serverStats?.tier ?? 'PLATINUM') : 'UNASSESSED';
 
   return (
     <div style={{
@@ -80,7 +84,6 @@ export const Dashboard: React.FC = () => {
       WebkitFontSmoothing: 'antialiased',
       paddingBottom: '4rem',
     }}>
-      {/* Google Fonts */}
       <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;600;700;900&display=swap"
         rel="stylesheet"
@@ -88,7 +91,7 @@ export const Dashboard: React.FC = () => {
 
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '1.5rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
         
-        {/* ── 1. Top Welcome & Status Banner ────────────────────────────── */}
+        {/* Top Welcome Header */}
         <header style={{
           borderBottom: T.border4,
           paddingBottom: '1.5rem',
@@ -99,7 +102,6 @@ export const Dashboard: React.FC = () => {
           gap: '1.5rem',
         }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1.25rem' }}>
-            {/* Athlete Profile Photo */}
             {userPhoto ? (
               <img
                 src={userPhoto}
@@ -153,22 +155,6 @@ export const Dashboard: React.FC = () => {
                   <ShieldCheck size={14} color={T.primaryContainer} /> SAI Verified Athlete
                 </span>
                 <span style={{
-                  background: T.primaryContainer,
-                  color: T.primary,
-                  fontFamily: T.fontHeadline,
-                  fontWeight: 700,
-                  fontSize: '0.75rem',
-                  textTransform: 'uppercase',
-                  padding: '0.3rem 0.65rem',
-                  border: T.border2,
-                  boxShadow: '2px 2px 0px 0px #1a1a1a',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.35rem',
-                }}>
-                  <Flame size={14} color={T.secondary} /> 12 Day Streak
-                </span>
-                <span style={{
                   background: T.surfaceLowest,
                   color: T.primary,
                   fontFamily: T.fontHeadline,
@@ -202,25 +188,56 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <div style={{
-            background: T.primary,
-            color: T.onPrimary,
-            padding: '0.75rem 1.25rem',
-            fontFamily: T.fontHeadline,
-            fontWeight: 800,
-            fontSize: 'clamp(0.85rem, 2vw, 1.1rem)',
-            textTransform: 'uppercase',
-            border: T.border3,
-            boxShadow: T.shadow6,
             display: 'flex',
-            alignItems: 'center',
-            gap: '0.6rem',
+            gap: '0.75rem',
+            flexWrap: 'wrap',
           }}>
-            <Sparkles size={18} color={T.primaryContainer} />
-            TOP 8% AMONG U-18 ATHLETES
+            <Link
+              to="/progress"
+              style={{
+                background: T.surfaceLowest,
+                color: T.primary,
+                padding: '0.75rem 1.25rem',
+                fontFamily: T.fontHeadline,
+                fontWeight: 800,
+                fontSize: '0.9rem',
+                textTransform: 'uppercase',
+                border: T.border3,
+                boxShadow: T.shadow4,
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+              }}
+            >
+              <TrendingUp size={16} color={T.tertiary} />
+              Full Analytics
+            </Link>
+            <Link
+              to="/leaderboard"
+              style={{
+                background: T.primaryContainer,
+                color: T.primary,
+                padding: '0.75rem 1.25rem',
+                fontFamily: T.fontHeadline,
+                fontWeight: 800,
+                fontSize: '0.9rem',
+                textTransform: 'uppercase',
+                border: T.border3,
+                boxShadow: T.shadow4,
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+              }}
+            >
+              <Award size={16} color={T.primary} />
+              Leaderboard
+            </Link>
           </div>
         </header>
 
-        {/* ── Baseline Course Prompt for First-Time Users ─────────── */}
+        {/* Baseline Course Prompt for First-Time Users */}
         {!hasAssessments && (
           <div style={{
             background: '#ffffff',
@@ -277,7 +294,7 @@ export const Dashboard: React.FC = () => {
           </div>
         )}
 
-        {/* ── 2. Asymmetric Hero Bento Grid (Hero CTA + KreedAI Index) ────── */}
+        {/* Hero Bento Grid */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))',
@@ -299,7 +316,6 @@ export const Dashboard: React.FC = () => {
             justifyContent: 'space-between',
             gap: '1.75rem',
           }}>
-            {/* Geometric motion pattern */}
             <div style={{
               position: 'absolute',
               inset: 0,
@@ -351,7 +367,6 @@ export const Dashboard: React.FC = () => {
               </p>
             </div>
 
-            {/* Assessment Quick Actions */}
             <div style={{
               position: 'relative',
               zIndex: 2,
@@ -387,14 +402,6 @@ export const Dashboard: React.FC = () => {
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = 'none';
                   e.currentTarget.style.boxShadow = T.shadow6;
-                }}
-                onMouseDown={(e) => {
-                  e.currentTarget.style.transform = 'translate(2px, 2px)';
-                  e.currentTarget.style.boxShadow = '2px 2px 0px 0px #1a1a1a';
-                }}
-                onMouseUp={(e) => {
-                  e.currentTarget.style.transform = 'translate(-2px, -2px)';
-                  e.currentTarget.style.boxShadow = T.shadow8;
                 }}
               >
                 <Play size={20} fill={T.primaryContainer} color={T.primaryContainer} />
@@ -490,7 +497,7 @@ export const Dashboard: React.FC = () => {
                 display: 'inline-flex',
                 alignItems: 'baseline',
               }}>
-                {computedScore}
+                {overallScore}
                 <span style={{
                   fontSize: '1.5rem',
                   fontFamily: T.fontHeadline,
@@ -514,7 +521,6 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Brutalist Progress Bar */}
             <div>
               <div style={{
                 width: '100%',
@@ -529,7 +535,7 @@ export const Dashboard: React.FC = () => {
                   top: 0,
                   left: 0,
                   height: '100%',
-                  width: `${computedScore}%`,
+                  width: `${overallScore}%`,
                   background: T.primary,
                   transition: 'width 0.5s ease',
                 }} />
@@ -544,7 +550,7 @@ export const Dashboard: React.FC = () => {
                 color: T.onSurfaceVariant,
               }}>
                 <span>0 BASE</span>
-                <span>{computedScore} ELITE</span>
+                <span>{overallScore} ELITE</span>
                 <span>100 PRO</span>
               </div>
             </div>
@@ -552,7 +558,7 @@ export const Dashboard: React.FC = () => {
 
         </div>
 
-        {/* ── 3. Performance Core Stats Bento Grid ──────────────────────── */}
+        {/* Performance Core Stats Grid */}
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '1rem' }}>
             <h2 style={{
@@ -593,7 +599,6 @@ export const Dashboard: React.FC = () => {
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              transition: 'transform 0.15s ease, background 0.15s ease',
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontFamily: T.fontHeadline, fontWeight: 700, fontSize: '0.85rem', textTransform: 'uppercase' }}>
@@ -605,7 +610,7 @@ export const Dashboard: React.FC = () => {
               </div>
               <div style={{ margin: '1rem 0 0.5rem' }}>
                 <div style={{ fontFamily: T.fontHeadline, fontSize: '2.5rem', fontWeight: 900, lineHeight: 1 }}>
-                  95 <span style={{ fontSize: '1rem', color: T.onSurfaceVariant, fontWeight: 700 }}>/100</span>
+                  {speedScore} <span style={{ fontSize: '1rem', color: T.onSurfaceVariant, fontWeight: 700 }}>/100</span>
                 </div>
                 <p style={{ fontSize: '0.8rem', color: '#059669', fontWeight: 600, marginTop: '0.25rem' }}>
                   +5.4% fast-twitch response
@@ -633,7 +638,7 @@ export const Dashboard: React.FC = () => {
               </div>
               <div style={{ margin: '1rem 0 0.5rem' }}>
                 <div style={{ fontFamily: T.fontHeadline, fontSize: '2.5rem', fontWeight: 900, lineHeight: 1 }}>
-                  89 <span style={{ fontSize: '1rem', color: T.onSurfaceVariant, fontWeight: 700 }}>/100</span>
+                  {agilityScore} <span style={{ fontSize: '1rem', color: T.onSurfaceVariant, fontWeight: 700 }}>/100</span>
                 </div>
                 <p style={{ fontSize: '0.8rem', color: T.onSurfaceVariant, fontWeight: 600, marginTop: '0.25rem' }}>
                   Top 6% hip & knee mobility
@@ -661,10 +666,10 @@ export const Dashboard: React.FC = () => {
               </div>
               <div style={{ margin: '1rem 0 0.5rem' }}>
                 <div style={{ fontFamily: T.fontHeadline, fontSize: '2.5rem', fontWeight: 900, lineHeight: 1 }}>
-                  94.2%
+                  {formAccuracy}%
                 </div>
                 <p style={{ fontSize: '0.8rem', color: T.onSurfaceVariant, fontWeight: 600, marginTop: '0.25rem' }}>
-                  348 valid reps logged
+                  Anti-cheat depth verified
                 </p>
               </div>
             </div>
@@ -689,78 +694,17 @@ export const Dashboard: React.FC = () => {
               </div>
               <div style={{ margin: '1rem 0 0.5rem' }}>
                 <div style={{ fontFamily: T.fontHeadline, fontSize: '2.5rem', fontWeight: 900, lineHeight: 1 }}>
-                  1,850
+                  {eloRating.toLocaleString()}
                 </div>
                 <p style={{ fontSize: '0.8rem', color: T.tertiary, fontWeight: 700, marginTop: '0.25rem' }}>
-                  Platinum Tier • Rank #5 Delhi
+                  {tier} Tier
                 </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ── 4. AI Coach Insights & Form Correction Card ───────────────── */}
-        <div style={{
-          background: T.tertiaryContainer,
-          border: T.border4,
-          boxShadow: T.shadow6,
-          padding: '1.5rem 1.75rem',
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '1.25rem',
-          flexWrap: 'wrap',
-        }}>
-          <div style={{
-            background: T.surfaceLowest,
-            border: T.border3,
-            padding: '0.75rem',
-            boxShadow: '3px 3px 0px 0px #1a1a1a',
-          }}>
-            <Lightbulb size={28} color={T.tertiary} />
-          </div>
-          <div style={{ flex: 1, minWidth: '260px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-              <span style={{
-                fontFamily: T.fontHeadline,
-                fontWeight: 900,
-                fontSize: '0.85rem',
-                textTransform: 'uppercase',
-                background: T.primary,
-                color: T.onPrimary,
-                padding: '0.2rem 0.5rem',
-              }}>
-                AI COACH INSIGHT
-              </span>
-              <h3 style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '1.15rem', textTransform: 'uppercase', margin: 0 }}>
-                Kinetic Form Correction
-              </h3>
-            </div>
-            <p style={{ fontFamily: T.fontBody, fontSize: '0.95rem', lineHeight: 1.5, color: T.onSurface, maxWidth: '800px' }}>
-              Your squat depth symmetry improved to <strong>94%</strong>, but knee valgus was detected on late reps (reps 8-10). Focus on keeping your knees tracking inline with your second toe.
-            </p>
-          </div>
-          <Link
-            to="/assessment"
-            style={{
-              background: T.primary,
-              color: T.onPrimary,
-              fontFamily: T.fontHeadline,
-              fontWeight: 800,
-              fontSize: '0.85rem',
-              textTransform: 'uppercase',
-              padding: '0.75rem 1.25rem',
-              border: T.border3,
-              boxShadow: '3px 3px 0px 0px #1a1a1a',
-              textDecoration: 'none',
-              alignSelf: 'center',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Launch Squat Drill
-          </Link>
-        </div>
-
-        {/* ── 5. Standard Physical Benchmark Tests (Drills) ─────────────── */}
+        {/* Standard Physical Benchmark Tests */}
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h2 style={{
@@ -900,184 +844,67 @@ export const Dashboard: React.FC = () => {
                 <Play size={16} fill="#fff" /> Begin Test
               </Link>
             </div>
-          </div>
-        </div>
 
-        {/* ── 6. Achievements Showcase ─────────────────────────────────── */}
-        <div>
-          <h2 style={{
-            fontFamily: T.fontHeadline,
-            fontSize: '1.5rem',
-            fontWeight: 900,
-            textTransform: 'uppercase',
-            letterSpacing: '-0.02em',
-            marginBottom: '1rem',
-          }}>
-            Athlete Badges & Achievements
-          </h2>
-
-          <div style={{
-            display: 'flex',
-            gap: '1rem',
-            overflowX: 'auto',
-            paddingBottom: '0.75rem',
-          }}>
+            {/* Dumbbell Curl Biomechanics Card */}
             <div style={{
-              minWidth: '160px',
               background: T.surfaceLowest,
               border: T.border3,
-              padding: '1.25rem 1rem',
+              boxShadow: T.shadow6,
+              padding: '1.5rem',
               display: 'flex',
               flexDirection: 'column',
-              alignItems: 'center',
-              textAlign: 'center',
-              boxShadow: T.shadow4,
+              justifyContent: 'space-between',
+              gap: '1.25rem',
             }}>
-              <div style={{
-                width: '56px',
-                height: '56px',
-                background: T.primaryContainer,
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: T.border2,
-                marginBottom: '0.75rem',
-              }}>
-                <Medal size={28} color={T.primary} />
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div style={{ background: T.tertiaryContainer, border: T.border2, padding: '0.4rem' }}>
+                      <Dumbbell size={20} color={T.tertiary} />
+                    </div>
+                    <h3 style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '1.2rem', textTransform: 'uppercase' }}>
+                      Dumbbell Curl
+                    </h3>
+                  </div>
+                  <span style={{
+                    background: T.surfaceVariant,
+                    border: T.border2,
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    padding: '0.2rem 0.45rem',
+                    fontFamily: T.fontHeadline,
+                  }}>
+                    UPPER STRENGTH & ROM
+                  </span>
+                </div>
+                <p style={{ fontSize: '0.9rem', color: T.onSurfaceVariant, lineHeight: 1.5 }}>
+                  Evaluates arm curl range of motion, elbow stability, torso anti-momentum, and lowering tempo control via MediaPipe skeleton.
+                </p>
               </div>
-              <span style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '0.9rem', textTransform: 'uppercase' }}>
-                Sprint King
-              </span>
-              <span style={{ fontSize: '0.7rem', color: T.onSurfaceVariant, marginTop: '0.2rem' }}>
-                Sub-11.5s 100m Pace
-              </span>
+
+              <Link
+                to="/assessment"
+                style={{
+                  width: '100%',
+                  background: T.primary,
+                  color: T.onPrimary,
+                  fontFamily: T.fontHeadline,
+                  fontWeight: 800,
+                  fontSize: '0.95rem',
+                  textTransform: 'uppercase',
+                  padding: '0.85rem',
+                  border: T.border3,
+                  boxShadow: T.shadow4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  textDecoration: 'none',
+                }}
+              >
+                <Play size={16} fill="#fff" /> Begin Test
+              </Link>
             </div>
-
-            <div style={{
-              minWidth: '160px',
-              background: T.surfaceLowest,
-              border: T.border3,
-              padding: '1.25rem 1rem',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              textAlign: 'center',
-              boxShadow: T.shadow4,
-            }}>
-              <div style={{
-                width: '56px',
-                height: '56px',
-                background: T.secondaryContainer,
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: T.border2,
-                marginBottom: '0.75rem',
-              }}>
-                <Award size={28} color={T.secondary} />
-              </div>
-              <span style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '0.9rem', textTransform: 'uppercase' }}>
-                Top 8% National
-              </span>
-              <span style={{ fontSize: '0.7rem', color: T.onSurfaceVariant, marginTop: '0.2rem' }}>
-                Verified SAI Ranking
-              </span>
-            </div>
-
-            <div style={{
-              minWidth: '160px',
-              background: T.surfaceLowest,
-              border: T.border3,
-              padding: '1.25rem 1rem',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              textAlign: 'center',
-              boxShadow: T.shadow4,
-            }}>
-              <div style={{
-                width: '56px',
-                height: '56px',
-                background: T.tertiaryContainer,
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: T.border2,
-                marginBottom: '0.75rem',
-              }}>
-                <Timer size={28} color={T.tertiary} />
-              </div>
-              <span style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '0.9rem', textTransform: 'uppercase' }}>
-                12-Day Streak
-              </span>
-              <span style={{ fontSize: '0.7rem', color: T.onSurfaceVariant, marginTop: '0.2rem' }}>
-                Consistency Master
-              </span>
-            </div>
-
-            <div style={{
-              minWidth: '160px',
-              background: T.surfaceLowest,
-              border: T.border3,
-              padding: '1.25rem 1rem',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              textAlign: 'center',
-              opacity: 0.6,
-              borderStyle: 'dashed',
-            }}>
-              <div style={{
-                width: '56px',
-                height: '56px',
-                background: T.surfaceVariant,
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '2px dashed #1a1a1a',
-                marginBottom: '0.75rem',
-              }}>
-                <Lock size={24} color={T.onSurfaceVariant} />
-              </div>
-              <span style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '0.9rem', textTransform: 'uppercase' }}>
-                Iron Core
-              </span>
-              <span style={{ fontSize: '0.7rem', color: T.onSurfaceVariant, marginTop: '0.2rem' }}>
-                Locked (Score &gt; 90)
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* ── 7. Charts & Leaderboard Integration ───────────────────────── */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 450px), 1fr))',
-          gap: '1.5rem',
-          marginTop: '0.5rem',
-        }}>
-          <div style={{
-            background: T.surfaceLowest,
-            border: T.border3,
-            boxShadow: T.shadow6,
-            padding: '1rem',
-            overflow: 'hidden',
-          }}>
-            <ProgressChart />
-          </div>
-
-          <div style={{
-            background: T.surfaceLowest,
-            border: T.border3,
-            boxShadow: T.shadow6,
-            padding: '1rem',
-            overflow: 'hidden',
-          }}>
-            <Leaderboard compact={true} />
           </div>
         </div>
 
@@ -1085,3 +912,5 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 };
+
+export default Dashboard;

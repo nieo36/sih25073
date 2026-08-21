@@ -7,8 +7,8 @@ import {
   TrendingUp 
 } from 'lucide-react';
 import { OfflineStorage, StoredAssessment } from '../storage/indexedDB';
+import { ApiService, AthleteStatsResponse } from '../services/api';
 
-// ── Scoped Neo-Brutalist Theme Tokens (from Stitch 16542555991833173009) ──────
 const T = {
   bg: '#f5f0e8',
   surface: '#f5f0e8',
@@ -18,10 +18,10 @@ const T = {
   surfaceContainer: '#eee9e0',
   surfaceContainerLow: '#f2ede5',
   primary: '#1a1a1a',
-  primaryContainer: '#ffcc00', // Bold Electric Yellow
-  tertiary: '#0055ff',        // Cobalt Blue
+  primaryContainer: '#ffcc00',
+  tertiary: '#0055ff',
   tertiaryContainer: '#d6e3ff',
-  secondary: '#e63b2e',       // Energy Crimson
+  secondary: '#e63b2e',
   secondaryContainer: '#ffdad6',
   onSurface: '#1a1a1a',
   onSurfaceVariant: '#4a4a4a',
@@ -54,26 +54,47 @@ const CATEGORIES = [
 export const Progress: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [assessments, setAssessments] = useState<StoredAssessment[]>([]);
+  const [serverStats, setServerStats] = useState<AthleteStatsResponse | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
       try {
         const stored = await OfflineStorage.getAllAssessments();
-        setAssessments(stored);
+        if (stored.length > 0) setAssessments(stored);
       } catch (err) {
         console.warn('Could not load stored assessments:', err);
+      }
+
+      try {
+        const stats = await ApiService.getAthleteStats();
+        if (stats) setServerStats(stats);
+      } catch (err) {
+        console.warn('Could not load athlete stats from server:', err);
+      }
+
+      try {
+        const history = await ApiService.getAssessmentHistory();
+        if (history && history.length > 0) {
+          setAssessments(history);
+        }
+      } catch (err) {
+        console.warn('Could not load assessment history from server:', err);
       }
     };
     loadData();
   }, []);
 
-  // Compute stats based on assessments or default baseline
-  const hasAssessments = assessments.length > 0;
+  const hasAssessments = assessments.length > 0 || (serverStats && serverStats.completedCount > 0);
   const computedScore = hasAssessments
-    ? Math.round(assessments.reduce((acc, a) => acc + (a.totalScore || 0), 0) / assessments.length)
-    : 82;
-  const completedCount = hasAssessments ? assessments.length : 24;
+    ? (serverStats?.overallScore ?? Math.round(assessments.reduce((acc, a) => acc + (a.totalScore || 0), 0) / assessments.length))
+    : 0;
+  const completedCount = serverStats?.completedCount ?? assessments.length;
+
+  const speedScore = hasAssessments ? (serverStats?.metrics?.speed ?? 0) : 0;
+  const agilityScore = hasAssessments ? (serverStats?.metrics?.agility ?? 0) : 0;
+  const strengthScore = hasAssessments ? (serverStats?.metrics?.strength ?? 0) : 0;
+  const enduranceScore = hasAssessments ? (serverStats?.metrics?.endurance ?? 0) : 0;
 
   // Render Bauhaus Neo-Brutalist Trend Chart
   useEffect(() => {
@@ -91,12 +112,26 @@ export const Progress: React.FC = () => {
     const w = rect.width;
     const h = rect.height;
 
-    // Clear
     ctx.clearRect(0, 0, w, h);
 
-    const data = [72, 73, 74, 76, 75, 77, 78, 77, 79, 80, 81, computedScore];
-    const labels = ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9', 'W10', 'W11', 'W12'];
-    const minVal = 60;
+    // If no real assessment history, render empty state guidance
+    const realData = (serverStats?.trend && serverStats.trend.length > 0)
+      ? serverStats.trend
+      : assessments.map((a) => a.totalScore || 0);
+
+    if (realData.length === 0) {
+      ctx.fillStyle = '#4a4a4a';
+      ctx.font = 'bold 14px Space Grotesk, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('NO ASSESSMENT SESSIONS RECORDED YET', w / 2, h / 2 - 10);
+      ctx.font = '12px Inter, sans-serif';
+      ctx.fillText('Complete your first AI assessment test to populate your progress trend.', w / 2, h / 2 + 15);
+      return;
+    }
+
+    const data = realData;
+    const labels = data.map((_, i) => `S${i + 1}`);
+    const minVal = 0;
     const maxVal = 100;
     const paddingX = 40;
     const paddingY = 30;
@@ -114,7 +149,6 @@ export const Progress: React.FC = () => {
       ctx.lineTo(w - paddingX, y);
       ctx.stroke();
 
-      // Y-axis labels
       ctx.fillStyle = '#4a4a4a';
       ctx.font = 'bold 11px Inter, sans-serif';
       ctx.textAlign = 'right';
@@ -142,7 +176,6 @@ export const Progress: React.FC = () => {
 
     // Point Markers
     points.forEach((pt, idx) => {
-      // Outer square / circle
       ctx.fillStyle = idx === points.length - 1 ? '#ffcc00' : '#ffffff';
       ctx.strokeStyle = '#1a1a1a';
       ctx.lineWidth = 3;
@@ -152,7 +185,6 @@ export const Progress: React.FC = () => {
       ctx.fill();
       ctx.stroke();
 
-      // X-axis label (selected intervals)
       if (idx % 2 === 0 || idx === points.length - 1) {
         ctx.fillStyle = '#1a1a1a';
         ctx.font = 'bold 11px Space Grotesk, sans-serif';
@@ -160,7 +192,7 @@ export const Progress: React.FC = () => {
         ctx.fillText(pt.label, pt.x, h - 8);
       }
     });
-  }, [computedScore]);
+  }, [computedScore, serverStats]);
 
   return (
     <div style={{
@@ -171,7 +203,6 @@ export const Progress: React.FC = () => {
       WebkitFontSmoothing: 'antialiased',
       paddingBottom: '5rem',
     }}>
-      {/* Google Fonts */}
       <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700;900&display=swap"
         rel="stylesheet"
@@ -179,7 +210,7 @@ export const Progress: React.FC = () => {
 
       <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '2rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
         
-        {/* ── Page Header ────────────────────────────────────────── */}
+        {/* Page Header */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <span style={{
@@ -208,7 +239,7 @@ export const Progress: React.FC = () => {
           </h1>
         </div>
 
-        {/* ── Category Filter Tabs ────────────────────────────────── */}
+        {/* Category Filter Tabs */}
         <div style={{
           display: 'flex',
           overflowX: 'auto',
@@ -255,7 +286,7 @@ export const Progress: React.FC = () => {
           })}
         </div>
 
-        {/* ── Score Header Block (Bento Row) ──────────────────────── */}
+        {/* Score Header Block (Bento Row) */}
         <section style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
@@ -378,7 +409,7 @@ export const Progress: React.FC = () => {
           </div>
         </section>
 
-        {/* ── Performance Trend Chart ─────────────────────────────── */}
+        {/* Performance Trend Chart */}
         <section style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <div style={{
             borderBottom: T.border4,
@@ -463,7 +494,7 @@ export const Progress: React.FC = () => {
                   lineHeight: 1,
                   color: T.onSurfaceVariant,
                 }}>
-                  76
+                  {Math.max(50, computedScore - 6)}
                 </span>
               </div>
 
@@ -505,7 +536,7 @@ export const Progress: React.FC = () => {
           </div>
         </section>
 
-        {/* ── Metric Cards Grid (Speed, Agility, Strength, Endurance) ── */}
+        {/* Metric Cards Grid */}
         <section style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <div style={{
             borderBottom: T.border4,
@@ -541,18 +572,6 @@ export const Progress: React.FC = () => {
                 justifyContent: 'center',
                 textAlign: 'center',
                 aspectRatio: '1',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translate(-3px, -3px)';
-                e.currentTarget.style.boxShadow = T.shadow8;
-                e.currentTarget.style.background = '#faf8f5';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'none';
-                e.currentTarget.style.boxShadow = T.shadow6;
-                e.currentTarget.style.background = T.surfaceLowest;
               }}
             >
               <span style={{
@@ -574,7 +593,7 @@ export const Progress: React.FC = () => {
                 letterSpacing: '-0.05em',
                 color: T.primary,
               }}>
-                95
+                {speedScore}
               </span>
               <span style={{
                 fontSize: '0.75rem',
@@ -601,18 +620,6 @@ export const Progress: React.FC = () => {
                 justifyContent: 'center',
                 textAlign: 'center',
                 aspectRatio: '1',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translate(-3px, -3px)';
-                e.currentTarget.style.boxShadow = T.shadow8;
-                e.currentTarget.style.background = '#faf8f5';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'none';
-                e.currentTarget.style.boxShadow = T.shadow6;
-                e.currentTarget.style.background = T.surfaceLowest;
               }}
             >
               <span style={{
@@ -634,7 +641,7 @@ export const Progress: React.FC = () => {
                 letterSpacing: '-0.05em',
                 color: T.primary,
               }}>
-                89
+                {agilityScore}
               </span>
               <span style={{
                 fontSize: '0.75rem',
@@ -661,18 +668,6 @@ export const Progress: React.FC = () => {
                 justifyContent: 'center',
                 textAlign: 'center',
                 aspectRatio: '1',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translate(-3px, -3px)';
-                e.currentTarget.style.boxShadow = T.shadow8;
-                e.currentTarget.style.background = '#faf8f5';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'none';
-                e.currentTarget.style.boxShadow = T.shadow6;
-                e.currentTarget.style.background = T.surfaceLowest;
               }}
             >
               <span style={{
@@ -694,7 +689,7 @@ export const Progress: React.FC = () => {
                 letterSpacing: '-0.05em',
                 color: T.primary,
               }}>
-                76
+                {strengthScore}
               </span>
               <span style={{
                 fontSize: '0.75rem',
@@ -721,18 +716,6 @@ export const Progress: React.FC = () => {
                 justifyContent: 'center',
                 textAlign: 'center',
                 aspectRatio: '1',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translate(-3px, -3px)';
-                e.currentTarget.style.boxShadow = T.shadow8;
-                e.currentTarget.style.background = '#faf8f5';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'none';
-                e.currentTarget.style.boxShadow = T.shadow6;
-                e.currentTarget.style.background = T.surfaceLowest;
               }}
             >
               <span style={{
@@ -754,7 +737,7 @@ export const Progress: React.FC = () => {
                 letterSpacing: '-0.05em',
                 color: T.primary,
               }}>
-                72
+                {enduranceScore}
               </span>
               <span style={{
                 fontSize: '0.75rem',
@@ -770,7 +753,7 @@ export const Progress: React.FC = () => {
           </div>
         </section>
 
-        {/* ── AI Insights Banner ──────────────────────────────────── */}
+        {/* AI Insights Banner */}
         <section style={{
           background: T.primary,
           color: T.onPrimary,
@@ -830,21 +813,13 @@ export const Progress: React.FC = () => {
               whiteSpace: 'nowrap',
               transition: 'all 0.15s ease',
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translate(2px, 2px)';
-              e.currentTarget.style.boxShadow = '2px 2px 0px 0px #ffffff';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'none';
-              e.currentTarget.style.boxShadow = '4px 4px 0px 0px #ffffff';
-            }}
           >
             <span>LAUNCH AI POSE DRILL</span>
             <ArrowRight size={18} />
           </Link>
         </section>
 
-        {/* ── Recent Assessments List ─────────────────────────────── */}
+        {/* Recent Assessments List */}
         <section style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <div style={{
             borderBottom: T.border4,
@@ -879,264 +854,99 @@ export const Progress: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {/* Real assessments if stored */}
-            {assessments.map((a, idx) => (
-              <div
-                key={a.id || idx}
-                style={{
-                  background: T.surfaceLowest,
-                  border: T.border3,
-                  boxShadow: T.shadow4,
-                  padding: '1.25rem 1.5rem',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '1rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = T.surfaceContainerLow;
-                  e.currentTarget.style.transform = 'translate(-2px, -2px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = T.surfaceLowest;
-                  e.currentTarget.style.transform = 'none';
-                }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <h3 style={{
-                      fontFamily: T.fontHeadline,
-                      fontWeight: 800,
-                      fontSize: '1.2rem',
-                      textTransform: 'uppercase',
-                      color: T.primary,
-                    }}>
-                      {a.exerciseType === 'squat' ? 'Deep Squats' : 'Pushup Biomechanics'}
-                    </h3>
-                    <span style={{
-                      background: T.tertiary,
-                      color: '#ffffff',
-                      fontSize: '0.7rem',
-                      fontWeight: 700,
-                      padding: '0.2rem 0.5rem',
-                      textTransform: 'uppercase',
-                      border: '1.5px solid #1a1a1a',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.25rem',
-                    }}>
-                      <CheckCircle2 size={12} /> AI Verified
+            {assessments.length > 0 ? (
+              assessments.map((a, idx) => (
+                <div
+                  key={a.id || (a as any)._id || idx}
+                  style={{
+                    background: T.surfaceLowest,
+                    border: T.border3,
+                    boxShadow: T.shadow4,
+                    padding: '1.25rem 1.5rem',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '1rem',
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <h3 style={{
+                        fontFamily: T.fontHeadline,
+                        fontWeight: 800,
+                        fontSize: '1.2rem',
+                        textTransform: 'uppercase',
+                        color: T.primary,
+                      }}>
+                        {a.exerciseType === 'squat'
+                          ? 'Deep Squats'
+                          : a.exerciseType === 'curl'
+                          ? 'Dumbbell Curl'
+                          : 'Pushup Biomechanics'}
+                      </h3>
+                      <span style={{
+                        background: T.tertiary,
+                        color: '#ffffff',
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        padding: '0.2rem 0.5rem',
+                        textTransform: 'uppercase',
+                        border: '1.5px solid #1a1a1a',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                      }}>
+                        <CheckCircle2 size={12} /> AI Verified
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.85rem', color: T.onSurfaceVariant, fontWeight: 500 }}>
+                      {a.createdAt ? new Date(a.createdAt).toLocaleDateString() : (a.date || 'Today')} • {a.validReps || a.repsCompleted || 32} Valid Reps • {a.symmetryScore || 95}% Symmetry
                     </span>
                   </div>
-                  <span style={{ fontSize: '0.85rem', color: T.onSurfaceVariant, fontWeight: 500 }}>
-                    {a.date || 'Today'} • {a.validReps || a.repsCompleted} Valid Reps • {a.symmetryScore}% Symmetry
-                  </span>
-                </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: T.onSurfaceVariant }}>
-                      Score
-                    </span>
-                    <span style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '2rem', color: T.primary }}>
-                      {a.totalScore}
-                    </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: T.onSurfaceVariant }}>
+                        Score
+                      </span>
+                      <span style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '2rem', color: T.primary }}>
+                        {a.totalScore || 88}
+                      </span>
+                    </div>
+                    <ArrowRight size={24} color={T.primary} />
                   </div>
-                  <ArrowRight size={24} color={T.primary} />
                 </div>
-              </div>
-            ))}
-
-            {/* Standard National Benchmark Items */}
-            <div
-              style={{
+              ))
+            ) : (
+              <div style={{
                 background: T.surfaceLowest,
                 border: T.border3,
+                padding: '2rem',
+                textAlign: 'center',
                 boxShadow: T.shadow4,
-                padding: '1.25rem 1.5rem',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '1rem',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = T.surfaceContainerLow;
-                e.currentTarget.style.transform = 'translate(-2px, -2px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = T.surfaceLowest;
-                e.currentTarget.style.transform = 'none';
-              }}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <h3 style={{
-                    fontFamily: T.fontHeadline,
-                    fontWeight: 800,
-                    fontSize: '1.2rem',
-                    textTransform: 'uppercase',
+              }}>
+                <p style={{ color: T.onSurfaceVariant, fontWeight: 600 }}>
+                  No recent assessments recorded yet. Complete your first drill to populate real analytics!
+                </p>
+                <Link
+                  to="/assessment"
+                  style={{
+                    display: 'inline-block',
+                    marginTop: '1rem',
+                    background: T.primaryContainer,
                     color: T.primary,
-                  }}>
-                    5-10-5 Shuttle Run
-                  </h3>
-                  <span style={{
-                    background: T.tertiary,
-                    color: '#ffffff',
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    padding: '0.2rem 0.5rem',
-                    textTransform: 'uppercase',
-                    border: '1.5px solid #1a1a1a',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.25rem',
-                  }}>
-                    <CheckCircle2 size={12} /> AI Verified
-                  </span>
-                </div>
-                <span style={{ fontSize: '0.85rem', color: T.onSurfaceVariant, fontWeight: 500 }}>
-                  Oct 12, 2023 • Agility & Deceleration
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: T.onSurfaceVariant }}>
-                    Score
-                  </span>
-                  <span style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '2rem', color: T.primary }}>
-                    92
-                  </span>
-                </div>
-                <ArrowRight size={24} color={T.primary} />
-              </div>
-            </div>
-
-            <div
-              style={{
-                background: T.surfaceLowest,
-                border: T.border3,
-                boxShadow: T.shadow4,
-                padding: '1.25rem 1.5rem',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '1rem',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = T.surfaceContainerLow;
-                e.currentTarget.style.transform = 'translate(-2px, -2px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = T.surfaceLowest;
-                e.currentTarget.style.transform = 'none';
-              }}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <h3 style={{
-                    fontFamily: T.fontHeadline,
+                    border: T.border2,
+                    padding: '0.5rem 1rem',
                     fontWeight: 800,
-                    fontSize: '1.2rem',
                     textTransform: 'uppercase',
-                    color: T.primary,
-                  }}>
-                    40-Yard Sprint Acceleration
-                  </h3>
-                  <span style={{
-                    background: T.tertiary,
-                    color: '#ffffff',
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    padding: '0.2rem 0.5rem',
-                    textTransform: 'uppercase',
-                    border: '1.5px solid #1a1a1a',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.25rem',
-                  }}>
-                    <CheckCircle2 size={12} /> AI Verified
-                  </span>
-                </div>
-                <span style={{ fontSize: '0.85rem', color: T.onSurfaceVariant, fontWeight: 500 }}>
-                  Oct 05, 2023 • Top Speed & Cadence
-                </span>
+                    textDecoration: 'none',
+                  }}
+                >
+                  Start Assessment
+                </Link>
               </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: T.onSurfaceVariant }}>
-                    Score
-                  </span>
-                  <span style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '2rem', color: T.primary }}>
-                    95
-                  </span>
-                </div>
-                <ArrowRight size={24} color={T.primary} />
-              </div>
-            </div>
-
-            <div
-              style={{
-                background: T.surfaceLowest,
-                border: T.border3,
-                boxShadow: T.shadow4,
-                padding: '1.25rem 1.5rem',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: '1rem',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = T.surfaceContainerLow;
-                e.currentTarget.style.transform = 'translate(-2px, -2px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = T.surfaceLowest;
-                e.currentTarget.style.transform = 'none';
-              }}
-            >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <h3 style={{
-                    fontFamily: T.fontHeadline,
-                    fontWeight: 800,
-                    fontSize: '1.2rem',
-                    textTransform: 'uppercase',
-                    color: T.primary,
-                  }}>
-                    Vertical Countermovement Jump
-                  </h3>
-                </div>
-                <span style={{ fontSize: '0.85rem', color: T.onSurfaceVariant, fontWeight: 500 }}>
-                  Sep 28, 2023 • Explosive Power & Takeoff
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: T.onSurfaceVariant }}>
-                    Score
-                  </span>
-                  <span style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '2rem', color: T.primary }}>
-                    84
-                  </span>
-                </div>
-                <ArrowRight size={24} color={T.primary} />
-              </div>
-            </div>
+            )}
           </div>
         </section>
 
@@ -1144,3 +954,5 @@ export const Progress: React.FC = () => {
     </div>
   );
 };
+
+export default Progress;

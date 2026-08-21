@@ -40,7 +40,7 @@ export const Navbar: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isAuthenticated, logout } = useAuth();
-  const { language, setLanguage, t } = useLanguage();
+  const { t } = useLanguage();
 
   const navLinks = [
     { to: '/dashboard', label: t('nav.dashboard', 'Dashboard'), icon: LayoutDashboard },
@@ -178,68 +178,8 @@ export const Navbar: React.FC = () => {
           })}
         </div>
 
-        {/* Language Switcher & User Account / Auth Actions */}
+        {/* User Account / Auth Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexShrink: 0 }}>
-          {/* Fixed-Width Language Toggle */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            border: T.border2,
-            boxShadow: T.shadow2,
-            background: T.surfaceLowest,
-            height: '34px',
-            boxSizing: 'border-box',
-          }}>
-            <button
-              type="button"
-              onClick={() => setLanguage('en')}
-              style={{
-                width: '42px',
-                height: '100%',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.75rem',
-                fontFamily: T.fontHeadline,
-                fontWeight: 800,
-                textTransform: 'uppercase',
-                background: language === 'en' ? T.primaryContainer : 'transparent',
-                color: T.primary,
-                border: 'none',
-                borderRight: T.border2,
-                cursor: 'pointer',
-                transition: 'background 0.1s ease',
-                boxSizing: 'border-box',
-              }}
-              title="Switch to English"
-            >
-              EN
-            </button>
-            <button
-              type="button"
-              onClick={() => setLanguage('hi')}
-              style={{
-                width: '42px',
-                height: '100%',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.75rem',
-                fontFamily: T.fontHeadline,
-                fontWeight: 800,
-                textTransform: 'uppercase',
-                background: language === 'hi' ? T.primaryContainer : 'transparent',
-                color: T.primary,
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'background 0.1s ease',
-                boxSizing: 'border-box',
-              }}
-              title="हिंदी में बदलें"
-            >
-              हिन्दी
-            </button>
-          </div>
 
           {isAuthenticated && user ? (
             <>

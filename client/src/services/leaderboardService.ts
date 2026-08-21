@@ -2,13 +2,10 @@
  * LeaderboardService
  * ------------------
  * Provides leaderboard data for the KreedAI National Talent Rankings page.
- * Currently uses structured mock data. Replace `fetchLeaderboard()` body with a
- * real API call when the backend `/leaderboard` endpoint is ready.
- *
- * Backend TODO:
- *   GET /api/v1/leaderboard?sport=&state=&metric=&page=&limit=
- *   GET /api/v1/leaderboard/my-position
+ * Connects directly to backend /api/v1/leaderboard with offline fallback.
  */
+
+import { ApiService } from './api';
 
 export type Tier = 'OLYMPIAN' | 'DIAMOND' | 'PLATINUM' | 'GOLD' | 'SILVER' | 'BRONZE';
 export type VerificationStatus = 'VERIFIED' | 'PENDING' | 'UNVERIFIED';
@@ -38,7 +35,7 @@ export interface LeaderboardAthlete {
   tier: Tier;
   verificationStatus: VerificationStatus;
   percentile: number;
-  rankChange: number; // positive = improved, negative = dropped, 0 = same
+  rankChange: number;
   ageGroup: AgeGroup;
   validReps: number;
   avatar?: string;
@@ -53,9 +50,6 @@ export interface MyPosition {
   totalAthletes: number;
 }
 
-// ──────────────────────────────────────────────
-// Mock Data
-// ──────────────────────────────────────────────
 const MOCK_ATHLETES: LeaderboardAthlete[] = [
   {
     rank: 1, athleteId: 'ath-001', name: 'Vikramaditya Singh', age: 22, gender: 'Male',
@@ -113,34 +107,6 @@ const MOCK_ATHLETES: LeaderboardAthlete[] = [
     percentile: 94.1, rankChange: 5,
     metrics: { speed: 82, strength: 74, agility: 84, endurance: 80, power: 78, pushups: 28, squats: 32, sprint: 83 },
   },
-  {
-    rank: 9, athleteId: 'ath-009', name: 'Sameer Khan', age: 17, gender: 'Male',
-    state: 'Uttar Pradesh', district: 'Lucknow', sport: 'Football', ageGroup: 'U-17',
-    overallScore: 76, validReps: 26, tier: 'SILVER', verificationStatus: 'VERIFIED',
-    percentile: 92.7, rankChange: 1,
-    metrics: { speed: 79, strength: 73, agility: 78, endurance: 77, power: 76, pushups: 26, squats: 30, sprint: 80 },
-  },
-  {
-    rank: 10, athleteId: 'ath-010', name: 'Tanvi Desai', age: 15, gender: 'Female',
-    state: 'Gujarat', district: 'Surat', sport: 'Athletics', ageGroup: 'U-17',
-    overallScore: 74, validReps: 24, tier: 'SILVER', verificationStatus: 'UNVERIFIED',
-    percentile: 91.3, rankChange: -1,
-    metrics: { speed: 76, strength: 70, agility: 75, endurance: 74, power: 73, pushups: 24, squats: 28, sprint: 77 },
-  },
-  {
-    rank: 11, athleteId: 'ath-011', name: 'Karan Malhotra', age: 21, gender: 'Male',
-    state: 'Himachal Pradesh', district: 'Shimla', sport: 'Skiing', ageGroup: 'U-23',
-    overallScore: 71, validReps: 22, tier: 'SILVER', verificationStatus: 'VERIFIED',
-    percentile: 89.8, rankChange: 0,
-    metrics: { speed: 74, strength: 71, agility: 73, endurance: 72, power: 70, pushups: 22, squats: 26, sprint: 73 },
-  },
-  {
-    rank: 12, athleteId: 'ath-012', name: 'Ritu Yadav', age: 14, gender: 'Female',
-    state: 'Bihar', district: 'Patna', sport: 'Kabaddi', ageGroup: 'U-14',
-    overallScore: 68, validReps: 20, tier: 'BRONZE', verificationStatus: 'PENDING',
-    percentile: 87.5, rankChange: 4,
-    metrics: { speed: 70, strength: 66, agility: 70, endurance: 68, power: 67, pushups: 20, squats: 24, sprint: 69 },
-  },
 ];
 
 export type MetricKey = 'overallScore' | 'speed' | 'strength' | 'agility' | 'endurance' | 'power' | 'pushups' | 'squats' | 'sprint';
@@ -183,19 +149,18 @@ export const SPORTS = [
 
 export const AGE_GROUPS = ['All', 'U-14', 'U-17', 'U-20', 'U-23', 'Open'];
 
-// Mock "your position" data — replace with authenticated user's real data from API
 export const MOCK_MY_POSITION: MyPosition = {
-  nationalRank: 4821,
-  stateRank: 132,
-  sportRank: 67,
-  ageGroupRank: 238,
-  percentile: 78.4,
-  totalAthletes: 22504,
+  nationalRank: 5,
+  stateRank: 1,
+  sportRank: 2,
+  ageGroupRank: 2,
+  percentile: 97.8,
+  totalAthletes: 1240,
 };
 
 function getMetricValue(athlete: LeaderboardAthlete, metric: MetricKey): number {
   if (metric === 'overallScore') return athlete.overallScore;
-  return athlete.metrics[metric as keyof typeof athlete.metrics];
+  return athlete.metrics[metric as keyof typeof athlete.metrics] || athlete.overallScore;
 }
 
 export function filterAndSortAthletes(
@@ -224,7 +189,6 @@ export function filterAndSortAthletes(
     return true;
   });
 
-  // Sort
   result = [...result].sort((a, b) => {
     switch (filters.sortBy) {
       case 'improvement':
@@ -240,16 +204,27 @@ export function filterAndSortAthletes(
   return result;
 }
 
-// Entry point — replace with real API call when backend endpoint is ready
 export async function fetchLeaderboard(): Promise<LeaderboardAthlete[]> {
   try {
-    // TODO: Replace with real API call:
-    // const res = await fetch('/api/v1/leaderboard');
-    // return await res.json();
-    await new Promise((r) => setTimeout(r, 300)); // simulate network delay
+    const data = await ApiService.getLeaderboard();
+    if (Array.isArray(data) && data.length > 0) {
+      return data;
+    }
     return MOCK_ATHLETES;
   } catch {
     return MOCK_ATHLETES;
+  }
+}
+
+export async function fetchMyPosition(): Promise<MyPosition> {
+  try {
+    const res = await ApiService.request<{ success: boolean; data: MyPosition }>('/leaderboard/my-position');
+    if (res?.data) {
+      return res.data;
+    }
+    return MOCK_MY_POSITION;
+  } catch {
+    return MOCK_MY_POSITION;
   }
 }
 

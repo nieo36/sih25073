@@ -40,7 +40,7 @@ const AssessmentSchema = new mongoose.Schema(
     },
     exerciseType: {
       type: String,
-      enum: ['squat', 'pushup'],
+      enum: ['squat', 'pushup', 'curl'],
       required: true,
     },
     totalScore: {
