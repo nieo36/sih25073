@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Search,
@@ -20,6 +20,7 @@ import {
   Send,
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
+import { ApiService } from '../services/api';
 
 // ── Scoped Neo-Brutalist Theme Tokens ──────────────────────────────
 const T = {
@@ -221,6 +222,16 @@ export const RecruiterDashboard: React.FC = () => {
   const [showShortlistDrawer, setShowShortlistDrawer] = useState(false);
   const [invitationSent, setInvitationSent] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    ApiService.getRecruiterCandidates()
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setCandidates(data);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const showNotification = (msg: string) => {
     setToast(msg);

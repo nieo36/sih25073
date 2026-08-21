@@ -1,14 +1,12 @@
 const express = require('express');
 const {
-  syncAssessment,
-  batchSyncAssessments,
-  getHistory,
-  getAthleteStats,
-} = require('../controller/assessment.controller.js');
+  getLeaderboardHandler,
+  getMyPositionHandler,
+} = require('../controller/leaderboard.controller.js');
 const { verifyAccessToken } = require('../utils/token.js');
 const { user } = require('../model/user.model.js');
 
-const assessmentRouter = express.Router();
+const leaderboardRouter = express.Router();
 
 async function optionalAuth(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -34,9 +32,7 @@ async function optionalAuth(req, res, next) {
   next();
 }
 
-assessmentRouter.post('/sync', optionalAuth, syncAssessment);
-assessmentRouter.post('/batch-sync', optionalAuth, batchSyncAssessments);
-assessmentRouter.get('/history', optionalAuth, getHistory);
-assessmentRouter.get('/stats', optionalAuth, getAthleteStats);
+leaderboardRouter.get('/', optionalAuth, getLeaderboardHandler);
+leaderboardRouter.get('/my-position', optionalAuth, getMyPositionHandler);
 
-module.exports = { assessmentRouter };
+module.exports = { leaderboardRouter };

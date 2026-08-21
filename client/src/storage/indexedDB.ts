@@ -20,7 +20,7 @@ export interface LandmarkSample {
 export interface StoredAssessment {
   id: string; // Client UUID
   athleteId?: string;
-  exerciseType: 'squat' | 'pushup';
+  exerciseType: 'squat' | 'pushup' | 'curl';
   date: string;
   totalScore: number;
   grade: string;

@@ -492,6 +492,7 @@ async function googleAuthCallbackHandler(req, res) {
         const normalizedEmail = email.toLowerCase().trim();
 
         let profile = await user.findOne({ email: normalizedEmail });
+        let isNewUser = false;
 
         if (!profile) {
             const randomPassword = crypto.randomBytes(16).toString("hex");
@@ -503,13 +504,21 @@ async function googleAuthCallbackHandler(req, res) {
                 name: payload?.name || "User",
                 isEmailVerified: true,
                 twoFactorAuth: false,
+                profile: {},
             });
+            isNewUser = true;
         } else {
             if (!profile.isEmailVerified) {
                 profile.isEmailVerified = true;
                 await profile.save();
             }
         }
+
+        // Profile is considered complete if user has at minimum filled age and primarySport
+        const isProfileComplete = !!(
+            profile.profile?.age &&
+            profile.profile?.primarySport
+        );
 
         const accessToken = await createAccessToken(
             profile.id,
@@ -531,7 +540,7 @@ async function googleAuthCallbackHandler(req, res) {
 
         // If request is from browser navigation (OAuth redirect), redirect directly to client callback page
         if (!req.xhr && req.headers.accept && req.headers.accept.includes("text/html")) {
-            const redirectUrl = `${getClientUrl()}/auth/callback?token=${accessToken}&email=${encodeURIComponent(profile.email)}&name=${encodeURIComponent(profile.name || '')}&role=${profile.role}&id=${profile.id}&isEmailVerified=${profile.isEmailVerified}`;
+            const redirectUrl = `${getClientUrl()}/auth/callback?token=${accessToken}&email=${encodeURIComponent(profile.email)}&name=${encodeURIComponent(profile.name || '')}&role=${profile.role}&id=${profile.id}&isEmailVerified=${profile.isEmailVerified}&isNewUser=${isNewUser}&isProfileComplete=${isProfileComplete}`;
             return res.redirect(redirectUrl);
         }
 

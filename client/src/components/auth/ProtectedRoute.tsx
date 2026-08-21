@@ -54,6 +54,15 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requir
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // If user signed in via OAuth but hasn't completed their athlete profile preferences,
+  // redirect them to the onboarding form to fill in their details.
+  if (user && !user.profile?.age && !user.profile?.primarySport) {
+    // Only gate if they're not already on the onboarding page
+    if (location.pathname !== '/register') {
+      return <Navigate to="/register?oauth=true" replace />;
+    }
+  }
+
   // Check email verification status if required
   if (requireVerification && user && !user.isEmailVerified) {
     const handleResend = async () => {

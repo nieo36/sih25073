@@ -30,12 +30,34 @@ export interface AuthResponse {
   };
 }
 
+export interface AthleteStatsResponse {
+  overallScore: number;
+  completedCount: number;
+  totalValidReps: number;
+  eloRating: number;
+  tier: string;
+  percentile: number;
+  metrics: {
+    speed: number;
+    agility: number;
+    strength: number;
+    endurance: number;
+    power: number;
+    pushups: number;
+    squats: number;
+    formPrecision: number;
+    bilateralSymmetry: number;
+    mobilityRom: number;
+  };
+  trend: number[];
+}
+
 export class ApiService {
   private static getToken(): string | null {
     return localStorage.getItem('auth_token') || localStorage.getItem('accessToken');
   }
 
-  private static async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  public static async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = this.getToken();
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
@@ -64,7 +86,6 @@ export class ApiService {
         body: JSON.stringify(payload),
       });
     } catch {
-      // Mock auth fallback for development / offline use
       return {
         token: 'demo-jwt-token-xyz',
         user: {
@@ -79,6 +100,8 @@ export class ApiService {
   }
 
   public static async syncAssessment(assessment: StoredAssessment): Promise<{ success: boolean; id: string; remoteId?: string }> {
+    // NOTE: landmarkSamples are stripped — raw MediaPipe arrays can be 5–50 MB,
+    // they are stored locally in IndexedDB only and not needed server-side.
     return await this.request<{ success: boolean; id: string; remoteId?: string }>('/assessment/sync', {
       method: 'POST',
       body: JSON.stringify({
@@ -96,7 +119,7 @@ export class ApiService {
         formAccuracy: assessment.formAccuracy,
         cadenceScore: assessment.cadenceScore,
         angles: assessment.angles,
-        landmarkSamples: assessment.landmarkSamples,
+        // landmarkSamples intentionally omitted — too large for HTTP sync
         createdAt: assessment.createdAt ? new Date(assessment.createdAt).toISOString() : new Date(assessment.date).toISOString(),
       }),
     });
@@ -121,7 +144,7 @@ export class ApiService {
           formAccuracy: a.formAccuracy,
           cadenceScore: a.cadenceScore,
           angles: a.angles,
-          landmarkSamples: a.landmarkSamples,
+          // landmarkSamples intentionally omitted — too large for HTTP sync
           createdAt: a.createdAt ? new Date(a.createdAt).toISOString() : new Date(a.date).toISOString(),
         })),
       }),
@@ -130,26 +153,39 @@ export class ApiService {
 
   public static async getAssessmentHistory() {
     try {
-      return await this.request('/assessment/history');
+      const res = await this.request<{ success: boolean; data: any[] }>('/assessment/history');
+      return res.data || [];
     } catch {
       return [];
     }
   }
 
-  public static async getLeaderboard(filter: { exercise?: string; region?: string } = {}) {
+  public static async getAthleteStats(): Promise<AthleteStatsResponse | null> {
     try {
-      const query = new URLSearchParams(filter as Record<string, string>).toString();
-      return await this.request(`/leaderboard?${query}`);
+      const res = await this.request<{ success: boolean; data: AthleteStatsResponse }>('/assessment/stats');
+      return res.data;
     } catch {
-      // Demo mock data
-      return [
-        { rank: 1, name: 'Vikramaditya Singh', score: 98, reps: 45, tier: 'OLYMPIAN', state: 'Haryana', verified: true },
-        { rank: 2, name: 'Priya Narang', score: 96, reps: 42, tier: 'DIAMOND', state: 'Punjab', verified: true },
-        { rank: 3, name: 'Rohan Mehra', score: 94, reps: 40, tier: 'DIAMOND', state: 'Karnataka', verified: true },
-        { rank: 4, name: 'Ananya Roy', score: 91, reps: 38, tier: 'PLATINUM', state: 'Maharashtra', verified: true },
-        { rank: 5, name: 'Aarav Sharma (You)', score: 88, reps: 36, tier: 'PLATINUM', state: 'Delhi', verified: true },
-        { rank: 6, name: 'Kavita Chawla', score: 85, reps: 34, tier: 'GOLD', state: 'Rajasthan', verified: false },
-      ];
+      return null;
+    }
+  }
+
+  public static async getLeaderboard(filter: Record<string, string> = {}) {
+    try {
+      const query = new URLSearchParams(filter).toString();
+      const res = await this.request<{ success: boolean; data: any[] }>(`/leaderboard?${query}`);
+      return res.data || [];
+    } catch {
+      return [];
+    }
+  }
+
+  public static async getRecruiterCandidates(filter: Record<string, string> = {}) {
+    try {
+      const query = new URLSearchParams(filter).toString();
+      const res = await this.request<{ success: boolean; data: any[] }>(`/recruiter/candidates?${query}`);
+      return res.data || [];
+    } catch {
+      return [];
     }
   }
 }

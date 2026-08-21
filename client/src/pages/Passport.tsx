@@ -19,6 +19,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { OfflineStorage } from '../storage/indexedDB';
+import { ApiService } from '../services/api';
 import {
   buildPassportData,
   exportPassportPdf,
@@ -34,10 +35,10 @@ const T = {
   surfaceDim: '#d6d1c9',
   surfaceContainer: '#eee9e0',
   primary: '#1a1a1a',
-  primaryContainer: '#ffcc00', // Bold Electric Yellow
-  tertiary: '#0055ff',        // Cobalt Blue
+  primaryContainer: '#ffcc00',
+  tertiary: '#0055ff',
   tertiaryContainer: '#d6e3ff',
-  secondary: '#e63b2e',       // Energy Crimson
+  secondary: '#e63b2e',
   secondaryContainer: '#ffdad6',
   green: '#16a34a',
   greenContainer: '#dcfce7',
@@ -64,13 +65,28 @@ export const Passport: React.FC = () => {
   const passportCardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    OfflineStorage.getAllAssessments()
-      .then((data) => {
-        setPassport(buildPassportData(user, data));
-      })
-      .catch(() => {
-        setPassport(buildPassportData(user, []));
-      });
+    const loadData = async () => {
+      let assessmentData: any[] = [];
+      try {
+        const serverHistory = await ApiService.getAssessmentHistory();
+        if (Array.isArray(serverHistory) && serverHistory.length > 0) {
+          assessmentData = serverHistory;
+        }
+      } catch {}
+
+      if (assessmentData.length === 0) {
+        try {
+          const stored = await OfflineStorage.getAllAssessments();
+          if (stored.length > 0) {
+            assessmentData = stored;
+          }
+        } catch {}
+      }
+
+      setPassport(buildPassportData(user, assessmentData));
+    };
+
+    loadData();
   }, [user]);
 
   const showToast = (msg: string) => {
