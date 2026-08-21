@@ -66,6 +66,8 @@ const Schema = new mongoose.Schema(
             achievements: { type: String },
             bio: { type: String },
             trainingFrequency: { type: String, default: '3-4' },
+            profilePhoto: { type: String },
+            avatar: { type: String },
         },
         privacy: {
             movementInsights: { type: Boolean, default: true },

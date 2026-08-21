@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
-  Activity, 
   Award, 
   BarChart2, 
   Camera, 
@@ -11,9 +10,30 @@ import {
   ShieldAlert, 
   User,
   LogIn,
-  ShieldCheck
+  ShieldCheck,
+  Zap
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+
+// ── Scoped Neo-Brutalist Theme Tokens ──────────────────────────────
+const T = {
+  bg: '#f5f0e8',
+  surface: '#f5f0e8',
+  surfaceLowest: '#ffffff',
+  surfaceVariant: '#e8e3da',
+  primary: '#1a1a1a',
+  primaryContainer: '#ffcc00', // Yellow
+  tertiary: '#0055ff',        // Blue
+  secondary: '#e63b2e',       // Red
+  onPrimary: '#ffffff',
+  fontHeadline: "'Space Grotesk', sans-serif",
+  fontBody: "'Inter', sans-serif",
+  border2: '2px solid #1a1a1a',
+  border3: '3px solid #1a1a1a',
+  border4: '4px solid #1a1a1a',
+  shadow2: '2px 2px 0px 0px #1a1a1a',
+  shadow4: '4px 4px 0px 0px #1a1a1a',
+} as const;
 
 export const Navbar: React.FC = () => {
   const location = useLocation();
@@ -25,7 +45,7 @@ export const Navbar: React.FC = () => {
     { to: '/assessment', label: 'AI Assessment', icon: Camera },
     { to: '/progress', label: 'Analytics', icon: BarChart2 },
     { to: '/leaderboard', label: 'Leaderboard', icon: Award },
-    { to: '/passport', label: 'Sports Passport', icon: FileCheck },
+    { to: '/sports-passport', label: 'Sports Passport', icon: FileCheck },
     { to: '/recruiter', label: 'Recruiter Hub', icon: ShieldAlert },
   ];
 
@@ -35,15 +55,19 @@ export const Navbar: React.FC = () => {
     navigate('/login');
   };
 
+  // Get user avatar or profile photo if uploaded
+  const userAvatar = user?.profile?.profilePhoto || user?.profilePhoto || user?.avatar;
+
   return (
     <nav style={{
       position: 'sticky',
       top: 0,
       zIndex: 50,
-      background: 'rgba(9, 13, 22, 0.85)',
-      backdropFilter: 'blur(16px)',
-      borderBottom: '1px solid var(--border-color)',
-      padding: '0.75rem 1.5rem',
+      background: T.bg,
+      borderBottom: T.border4,
+      padding: '0.65rem 1.25rem',
+      fontFamily: T.fontBody,
+      boxShadow: '0 2px 0px 0px rgba(26,26,26,0.1)',
     }}>
       <div style={{
         maxWidth: '1280px',
@@ -52,37 +76,61 @@ export const Navbar: React.FC = () => {
         alignItems: 'center',
         justifyContent: 'space-between',
         flexWrap: 'wrap',
-        gap: '1rem'
+        gap: '0.85rem',
       }}>
         {/* Brand Logo */}
-        <Link to="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <Link to="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', textDecoration: 'none' }}>
           <div style={{
-            background: 'var(--gradient-neon)',
-            width: '38px',
-            height: '38px',
-            borderRadius: '10px',
+            background: T.primaryContainer,
+            width: '36px',
+            height: '36px',
+            border: T.border3,
+            boxShadow: T.shadow2,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 0 15px rgba(6, 182, 212, 0.4)'
           }}>
-            <Activity size={22} color="#fff" />
+            <Zap size={20} color={T.primary} />
           </div>
           <div>
-            <span style={{ fontSize: '1.2rem', fontWeight: 900, letterSpacing: '-0.03em', fontFamily: "'Space Grotesk', sans-serif" }}>
-              KREED<span className="gradient-text">AI</span>
-            </span>
-            <div style={{ fontSize: '0.68rem', color: 'var(--accent-cyan)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Elite AI Performance
+            <div style={{
+              fontSize: '1.25rem',
+              fontWeight: 900,
+              letterSpacing: '-0.04em',
+              fontFamily: T.fontHeadline,
+              textTransform: 'uppercase',
+              color: T.primary,
+              lineHeight: 1,
+            }}>
+              KREED<span style={{ color: T.secondary }}>AI</span>
+            </div>
+            <div style={{
+              fontSize: '0.65rem',
+              color: T.primary,
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              fontFamily: T.fontHeadline,
+              marginTop: '0.1rem',
+            }}>
+              Pose Studio & Analytics
             </div>
           </div>
         </Link>
 
         {/* Navigation Links */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', overflowX: 'auto', padding: '0.2rem 0' }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.35rem',
+          overflowX: 'auto',
+          padding: '0.2rem 0',
+        }}>
           {navLinks.map((item) => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.to;
+            const isActive =
+              location.pathname === item.to ||
+              (item.to === '/sports-passport' && location.pathname === '/passport');
             return (
               <Link
                 key={item.to}
@@ -90,19 +138,34 @@ export const Navbar: React.FC = () => {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.45rem',
-                  padding: '0.5rem 0.85rem',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.88rem',
-                  fontWeight: 600,
-                  color: isActive ? '#fff' : 'var(--text-secondary)',
-                  background: isActive ? 'rgba(6, 182, 212, 0.15)' : 'transparent',
-                  border: isActive ? '1px solid rgba(6, 182, 212, 0.35)' : '1px solid transparent',
-                  transition: 'all 0.2s ease',
-                  whiteSpace: 'nowrap'
+                  gap: '0.4rem',
+                  padding: '0.45rem 0.75rem',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  fontFamily: T.fontHeadline,
+                  textTransform: 'uppercase',
+                  textDecoration: 'none',
+                  color: T.primary,
+                  background: isActive ? T.primaryContainer : 'transparent',
+                  border: isActive ? T.border2 : '2px solid transparent',
+                  boxShadow: isActive ? T.shadow2 : 'none',
+                  transition: 'all 0.15s ease',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = T.surfaceVariant;
+                    e.currentTarget.style.borderColor = T.primary;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.borderColor = 'transparent';
+                  }
                 }}
               >
-                <Icon size={16} color={isActive ? 'var(--accent-cyan)' : 'currentColor'} />
+                <Icon size={15} color={T.primary} />
                 {item.label}
               </Link>
             );
@@ -110,7 +173,7 @@ export const Navbar: React.FC = () => {
         </div>
 
         {/* User Account / Auth Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
           {isAuthenticated && user ? (
             <>
               <div
@@ -118,38 +181,55 @@ export const Navbar: React.FC = () => {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.5rem',
-                  padding: '0.45rem 0.85rem',
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.85rem',
-                  fontWeight: 600,
-                  color: '#fff',
+                  padding: '0.35rem 0.65rem',
+                  background: T.surfaceLowest,
+                  border: T.border2,
+                  boxShadow: T.shadow2,
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  fontFamily: T.fontHeadline,
+                  color: T.primary,
                 }}
               >
-                <div
-                  style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    background: 'var(--gradient-neon)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    color: '#fff',
-                  }}
-                >
-                  {user.name ? user.name.charAt(0).toUpperCase() : <User size={13} />}
-                </div>
+                {userAvatar ? (
+                  <img
+                    src={userAvatar}
+                    alt={user.name || 'User'}
+                    style={{
+                      width: '26px',
+                      height: '26px',
+                      borderRadius: '50%',
+                      border: '1.5px solid #1a1a1a',
+                      objectFit: 'cover',
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      background: T.primaryContainer,
+                      border: '1.5px solid #1a1a1a',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.75rem',
+                      fontWeight: 800,
+                      color: T.primary,
+                    }}
+                  >
+                    {user.name ? user.name.charAt(0).toUpperCase() : <User size={13} />}
+                  </div>
+                )}
                 <span>{user.name || user.email.split('@')[0]}</span>
                 {user.twoFactorEnabled && (
                   <span title="2FA Active" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                    <ShieldCheck size={14} color="var(--accent-cyan)" />
+                    <ShieldCheck size={14} color={T.tertiary} />
                   </span>
                 )}
               </div>
+
               <button
                 type="button"
                 onClick={handleLogout}
@@ -158,40 +238,65 @@ export const Navbar: React.FC = () => {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '0.5rem',
-                  color: 'var(--text-muted)',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border-color)',
-                  background: 'transparent',
+                  padding: '0.45rem 0.6rem',
+                  color: T.primary,
+                  border: T.border2,
+                  background: T.surfaceLowest,
+                  boxShadow: T.shadow2,
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease',
+                  transition: 'all 0.15s ease',
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.color = '#f43f5e';
-                  e.currentTarget.style.borderColor = 'rgba(244, 63, 94, 0.4)';
+                  e.currentTarget.style.background = T.secondary;
+                  e.currentTarget.style.color = '#fff';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.color = 'var(--text-muted)';
-                  e.currentTarget.style.borderColor = 'var(--border-color)';
+                  e.currentTarget.style.background = T.surfaceLowest;
+                  e.currentTarget.style.color = T.primary;
                 }}
               >
-                <LogOut size={16} />
+                <LogOut size={15} />
               </button>
             </>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Link
                 to="/login"
-                className="btn btn-secondary"
-                style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem' }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  padding: '0.45rem 0.85rem',
+                  fontSize: '0.8rem',
+                  fontFamily: T.fontHeadline,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  textDecoration: 'none',
+                  background: T.surfaceLowest,
+                  color: T.primary,
+                  border: T.border2,
+                  boxShadow: T.shadow2,
+                }}
               >
-                <LogIn size={15} />
+                <LogIn size={14} />
                 <span>Sign In</span>
               </Link>
               <Link
                 to="/register"
-                className="btn btn-primary"
-                style={{ padding: '0.45rem 0.85rem', fontSize: '0.85rem' }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '0.45rem 0.85rem',
+                  fontSize: '0.8rem',
+                  fontFamily: T.fontHeadline,
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  textDecoration: 'none',
+                  background: T.primaryContainer,
+                  color: T.primary,
+                  border: T.border2,
+                  boxShadow: T.shadow2,
+                }}
               >
                 <span>Register</span>
               </Link>

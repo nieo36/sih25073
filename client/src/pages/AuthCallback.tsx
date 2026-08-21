@@ -46,18 +46,20 @@ export const AuthCallback: React.FC = () => {
 
       if (token && email) {
         try {
-          handleOAuthSuccess(token, {
+          const authUserObj = {
             id,
             email: decodeURIComponent(email),
             name: decodeURIComponent(name),
             role,
             isEmailVerified,
-          });
+          };
+          handleOAuthSuccess(token, authUserObj);
           if (isMounted) {
             setStatus('success');
             timer = setTimeout(() => {
-              navigate('/dashboard', { replace: true });
-            }, 1200);
+              // Direct new OAuth users to complete their athlete passport onboarding
+              navigate('/register?oauth=true', { replace: true });
+            }, 1000);
           }
         } catch (err: any) {
           if (isMounted) {
@@ -72,7 +74,7 @@ export const AuthCallback: React.FC = () => {
           setStatus('success');
           timer = setTimeout(() => {
             navigate('/dashboard', { replace: true });
-          }, 1200);
+          }, 1000);
         } else if (isMounted) {
           setStatus('error');
           setErrorMessage('Missing authentication tokens in callback response.');

@@ -34,6 +34,8 @@ export interface AthleteProfile {
   achievements?: string;
   bio?: string;
   trainingFrequency?: string;
+  profilePhoto?: string;
+  avatar?: string;
 }
 
 export interface PrivacyPreferences {
@@ -51,6 +53,8 @@ export interface AuthUser {
   role: string;
   isEmailVerified: boolean;
   twoFactorEnabled?: boolean;
+  avatar?: string;
+  profilePhoto?: string;
   profile?: AthleteProfile;
   privacy?: PrivacyPreferences;
 }

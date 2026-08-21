@@ -72,6 +72,14 @@ export const App: React.FC = () => {
                 }
               />
               <Route
+                path="/sports-passport"
+                element={
+                  <ProtectedRoute>
+                    <Passport />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/passport"
                 element={
                   <ProtectedRoute>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRight, Check, ChevronDown, Eye, EyeOff,
   Globe, User, Camera, Trophy, Shield, Lock, Award, Mail,
@@ -61,22 +61,16 @@ interface SportOption {
 }
 
 const SPORTS_LIST: SportOption[] = [
-  { id: 'Athletics & Track', name: 'Athletics & Track', category: 'Speed & Endurance', emoji: '🏃' },
-  { id: 'Football', name: 'Football (Soccer)', category: 'Team Sport', emoji: '⚽' },
-  { id: 'Cricket', name: 'Cricket', category: 'Bat & Ball', emoji: '🏏' },
-  { id: 'Badminton', name: 'Badminton', category: 'Racket Sport', emoji: '🏸' },
-  { id: 'Basketball', name: 'Basketball', category: 'Court & Agility', emoji: '🏀' },
-  { id: 'Swimming', name: 'Swimming', category: 'Aquatic Speed', emoji: '🏊' },
-  { id: 'Boxing', name: 'Boxing', category: 'Combat & Power', emoji: '🥊' },
+  { id: 'Athletics', name: 'Athletics & Track', category: 'Speed & Track', emoji: '🏃' },
+  { id: 'Football', name: 'Football (Soccer)', category: 'Team & Agility', emoji: '⚽' },
+  { id: 'Badminton', name: 'Badminton', category: 'Racket & Reflexes', emoji: '🏸' },
+  { id: 'Basketball', name: 'Basketball', category: 'Court & Power', emoji: '🏀' },
+  { id: 'Volleyball', name: 'Volleyball', category: 'Vertical Jump & Power', emoji: '🏐' },
+  { id: 'Boxing', name: 'Boxing', category: 'Combat & Speed', emoji: '🥊' },
   { id: 'Wrestling', name: 'Wrestling', category: 'Mat & Strength', emoji: '🤼' },
-  { id: 'Kabaddi', name: 'Kabaddi', category: 'Contact & Reflexes', emoji: '⚡' },
-  { id: 'Tennis', name: 'Tennis', category: 'Racket & Precision', emoji: '🎾' },
-  { id: 'Hockey', name: 'Field Hockey', category: 'Stick & Speed', emoji: '🏑' },
   { id: 'Weightlifting', name: 'Weightlifting', category: 'Pure Strength', emoji: '🏋️' },
+  { id: 'Hockey', name: 'Field Hockey', category: 'Stick & Precision', emoji: '🏑' },
   { id: 'Archery', name: 'Archery', category: 'Precision & Focus', emoji: '🎯' },
-  { id: 'Cycling', name: 'Cycling', category: 'Velodrome & Road', emoji: '🚴' },
-  { id: 'Table Tennis', name: 'Table Tennis', category: 'Fast Reflexes', emoji: '🏓' },
-  { id: 'Volleyball', name: 'Volleyball', category: 'Vertical Jump', emoji: '🏐' },
 ];
 
 // ── Form State Interface ──────────────────────
@@ -119,7 +113,7 @@ interface FormData {
 const initialFormData: FormData = {
   fullName: '', email: '', password: '', confirmPassword: '',
   age: '', gender: '', height: '', weight: '', country: 'in', state: '', city: '', areaType: 'urban',
-  primarySport: 'Athletics & Track', secondarySports: '', experienceLevel: 'intermediate', yearsExperience: '', athleticGoals: '',
+  primarySport: 'Athletics', secondarySports: '', experienceLevel: 'intermediate', yearsExperience: '', athleticGoals: '',
   dominantHand: 'right', dominantFoot: 'right', organization: '', achievements: '', bio: '', trainingFrequency: '3-4',
   movementInsights: true, highlightProcessing: true, recruiterDiscoverability: true, profileVisibility: 'verified', guardianConsent: false,
 };
@@ -218,7 +212,11 @@ const neoSecondary: React.CSSProperties = {
 //  REGISTER COMPONENT
 // ══════════════════════════════════════════════
 export const Register: React.FC = () => {
-  const [currentStep, setCurrentStep] = useState(0);
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const isOAuth = searchParams.get('oauth') === 'true';
+
+  const [currentStep, setCurrentStep] = useState(isOAuth ? 1 : 0);
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -229,7 +227,22 @@ export const Register: React.FC = () => {
   const [profilePhotoPreview, setProfilePhotoPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { register: registerUser, loginWithGoogle, saveProfile } = useAuth();
+  const { user, register: registerUser, loginWithGoogle, saveProfile, updateUser } = useAuth();
+
+  // Pre-fill user data if OAuth user
+  useEffect(() => {
+    if (isOAuth && user) {
+      setFormData((prev) => ({
+        ...prev,
+        fullName: user.name || prev.fullName,
+        email: user.email || prev.email,
+        primarySport: user.profile?.primarySport || prev.primarySport,
+      }));
+      if (user.profile?.profilePhoto || user.profilePhoto || user.avatar) {
+        setProfilePhotoPreview(user.profile?.profilePhoto || user.profilePhoto || user.avatar || null);
+      }
+    }
+  }, [isOAuth, user]);
 
   // ── Magic Link Email Verification State ──────────
   const [isEmailVerified, setIsEmailVerified] = useState(false);
@@ -275,7 +288,7 @@ export const Register: React.FC = () => {
     const errs: Partial<Record<keyof FormData, string>> = {};
     const step = STEPS[currentStep].key;
 
-    if (step === 'account') {
+    if (step === 'account' && !isOAuth) {
       if (!formData.fullName.trim()) errs.fullName = 'Full name is required';
       if (!formData.email.trim()) errs.email = 'Email address is required';
       else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) errs.email = 'Please enter a valid email address';
@@ -302,7 +315,7 @@ export const Register: React.FC = () => {
   const next = async () => {
     if (!validateStep()) return;
 
-    if (currentStep === 0) {
+    if (currentStep === 0 && !isOAuth) {
       setSubmitting(true);
       try {
         await registerUser({
@@ -329,6 +342,8 @@ export const Register: React.FC = () => {
             achievements: formData.achievements,
             bio: formData.bio,
             trainingFrequency: formData.trainingFrequency,
+            profilePhoto: profilePhotoPreview || undefined,
+            avatar: profilePhotoPreview || undefined,
           },
           privacy: {
             movementInsights: formData.movementInsights,
@@ -355,37 +370,50 @@ export const Register: React.FC = () => {
       setSubmitting(false);
     }
 
-    if (currentStep > 0 && currentStep < STEPS.length - 1) {
-      saveProfile({
-        profile: {
-          age: formData.age ? Number(formData.age) : undefined,
-          gender: formData.gender,
-          height: formData.height,
-          weight: formData.weight,
-          country: formData.country,
-          state: formData.state,
-          city: formData.city,
-          areaType: formData.areaType,
-          primarySport: formData.primarySport,
-          secondarySports: formData.secondarySports,
-          experienceLevel: formData.experienceLevel,
-          yearsExperience: formData.yearsExperience,
-          athleticGoals: formData.athleticGoals,
-          dominantHand: formData.dominantHand,
-          dominantFoot: formData.dominantFoot,
-          organization: formData.organization,
-          achievements: formData.achievements,
-          bio: formData.bio,
-          trainingFrequency: formData.trainingFrequency,
-        },
-        privacy: {
-          movementInsights: formData.movementInsights,
-          highlightProcessing: formData.highlightProcessing,
-          recruiterDiscoverability: formData.recruiterDiscoverability,
-          profileVisibility: formData.profileVisibility,
-          guardianConsent: formData.guardianConsent,
-        },
-      }).catch(() => {});
+    if (currentStep > 0 && currentStep <= 4) {
+      try {
+        await saveProfile({
+          name: formData.fullName,
+          profile: {
+            age: formData.age ? Number(formData.age) : undefined,
+            gender: formData.gender,
+            height: formData.height,
+            weight: formData.weight,
+            country: formData.country,
+            state: formData.state,
+            city: formData.city,
+            areaType: formData.areaType,
+            primarySport: formData.primarySport,
+            secondarySports: formData.secondarySports,
+            experienceLevel: formData.experienceLevel,
+            yearsExperience: formData.yearsExperience,
+            athleticGoals: formData.athleticGoals,
+            dominantHand: formData.dominantHand,
+            dominantFoot: formData.dominantFoot,
+            organization: formData.organization,
+            achievements: formData.achievements,
+            bio: formData.bio,
+            trainingFrequency: formData.trainingFrequency,
+            profilePhoto: profilePhotoPreview || undefined,
+            avatar: profilePhotoPreview || undefined,
+          },
+          privacy: {
+            movementInsights: formData.movementInsights,
+            highlightProcessing: formData.highlightProcessing,
+            recruiterDiscoverability: formData.recruiterDiscoverability,
+            profileVisibility: formData.profileVisibility,
+            guardianConsent: formData.guardianConsent,
+          },
+        });
+      } catch {
+        // Continue locally
+      }
+
+      // If OAuth user finishes step 4 (privacy), go directly to Dashboard
+      if (isOAuth && currentStep === 4) {
+        navigate('/dashboard', { replace: true });
+        return;
+      }
     }
 
     if (currentStep < STEPS.length - 1) {
@@ -401,7 +429,8 @@ export const Register: React.FC = () => {
   };
 
   const back = () => {
-    if (currentStep > 0) {
+    const minStep = isOAuth ? 1 : 0;
+    if (currentStep > minStep) {
       setCurrentStep((s) => s - 1);
       setErrors({});
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -436,7 +465,19 @@ export const Register: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = () => setProfilePhotoPreview(reader.result as string);
+      reader.onload = () => {
+        const photo = reader.result as string;
+        setProfilePhotoPreview(photo);
+        updateUser({
+          avatar: photo,
+          profilePhoto: photo,
+          profile: {
+            ...(user?.profile || {}),
+            profilePhoto: photo,
+            avatar: photo,
+          },
+        });
+      };
       reader.readAsDataURL(file);
     }
   };

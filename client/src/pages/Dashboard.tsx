@@ -23,6 +23,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { ProgressChart } from '../components/ProgressChart';
 import { Leaderboard } from '../components/Leaderboard';
+import { OfflineStorage } from '../storage/indexedDB';
 
 // ── Scoped Neo-Brutalist / Bauhaus Theme Tokens (from Stitch 16542555991833173009) ──────
 const T = {
@@ -54,9 +55,21 @@ const T = {
 
 export const Dashboard: React.FC = () => {
   const { user } = useAuth();
+  const [assessments, setAssessments] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    OfflineStorage.getAllAssessments().then(setAssessments).catch(() => {});
+  }, []);
 
   const athleteName = user?.name || 'Aarav Sharma';
   const firstName = athleteName.split(' ')[0];
+  const primarySport = user?.profile?.primarySport || 'Athletics';
+  const userPhoto = user?.profile?.profilePhoto || user?.profilePhoto || user?.avatar;
+
+  const hasAssessments = assessments.length > 0;
+  const computedScore = hasAssessments
+    ? Math.round(assessments.reduce((acc, a) => acc + (a.totalScore || 0), 0) / assessments.length)
+    : 82;
 
   return (
     <div style={{
@@ -85,53 +98,107 @@ export const Dashboard: React.FC = () => {
           flexWrap: 'wrap',
           gap: '1.5rem',
         }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
-              <span style={{
-                background: T.primary,
-                color: T.primaryContainer,
-                fontFamily: T.fontHeadline,
-                fontWeight: 700,
-                fontSize: '0.75rem',
-                textTransform: 'uppercase',
-                padding: '0.3rem 0.65rem',
-                border: T.border2,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-              }}>
-                <ShieldCheck size={14} color={T.primaryContainer} /> SAI Verified Athlete
-              </span>
-              <span style={{
-                background: T.primaryContainer,
-                color: T.primary,
-                fontFamily: T.fontHeadline,
-                fontWeight: 700,
-                fontSize: '0.75rem',
-                textTransform: 'uppercase',
-                padding: '0.3rem 0.65rem',
-                border: T.border2,
-                boxShadow: '2px 2px 0px 0px #1a1a1a',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-              }}>
-                <Flame size={14} color={T.secondary} /> 12 Day Streak
-              </span>
-            </div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1.25rem' }}>
+            {/* Athlete Profile Photo */}
+            {userPhoto ? (
+              <img
+                src={userPhoto}
+                alt={athleteName}
+                style={{
+                  width: '74px',
+                  height: '74px',
+                  border: T.border3,
+                  boxShadow: T.shadow4,
+                  objectFit: 'cover',
+                  flexShrink: 0,
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: '74px',
+                  height: '74px',
+                  background: T.primaryContainer,
+                  border: T.border3,
+                  boxShadow: T.shadow4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '2rem',
+                  fontFamily: T.fontHeadline,
+                  fontWeight: 900,
+                  color: T.primary,
+                  flexShrink: 0,
+                }}
+              >
+                {firstName.charAt(0).toUpperCase()}
+              </div>
+            )}
 
-            <h1 style={{
-              fontFamily: T.fontHeadline,
-              fontWeight: 900,
-              fontSize: 'clamp(2rem, 5vw, 3.5rem)',
-              letterSpacing: '-0.04em',
-              textTransform: 'uppercase',
-              lineHeight: 1.05,
-              color: T.primary,
-            }}>
-              Good Day, {firstName}.<br />
-              <span style={{ color: T.secondary }}>Your performance is your proof.</span>
-            </h1>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
+                <span style={{
+                  background: T.primary,
+                  color: T.primaryContainer,
+                  fontFamily: T.fontHeadline,
+                  fontWeight: 700,
+                  fontSize: '0.75rem',
+                  textTransform: 'uppercase',
+                  padding: '0.3rem 0.65rem',
+                  border: T.border2,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                }}>
+                  <ShieldCheck size={14} color={T.primaryContainer} /> SAI Verified Athlete
+                </span>
+                <span style={{
+                  background: T.primaryContainer,
+                  color: T.primary,
+                  fontFamily: T.fontHeadline,
+                  fontWeight: 700,
+                  fontSize: '0.75rem',
+                  textTransform: 'uppercase',
+                  padding: '0.3rem 0.65rem',
+                  border: T.border2,
+                  boxShadow: '2px 2px 0px 0px #1a1a1a',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                }}>
+                  <Flame size={14} color={T.secondary} /> 12 Day Streak
+                </span>
+                <span style={{
+                  background: T.surfaceLowest,
+                  color: T.primary,
+                  fontFamily: T.fontHeadline,
+                  fontWeight: 700,
+                  fontSize: '0.75rem',
+                  textTransform: 'uppercase',
+                  padding: '0.3rem 0.65rem',
+                  border: T.border2,
+                  boxShadow: '2px 2px 0px 0px #1a1a1a',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                }}>
+                  <Zap size={14} color={T.tertiary} /> {primarySport}
+                </span>
+              </div>
+
+              <h1 style={{
+                fontFamily: T.fontHeadline,
+                fontWeight: 900,
+                fontSize: 'clamp(2rem, 5vw, 3.2rem)',
+                letterSpacing: '-0.04em',
+                textTransform: 'uppercase',
+                lineHeight: 1.05,
+                color: T.primary,
+              }}>
+                Good Day, {firstName}.<br />
+                <span style={{ color: T.secondary }}>Your performance is your proof.</span>
+              </h1>
+            </div>
           </div>
 
           <div style={{
@@ -152,6 +219,63 @@ export const Dashboard: React.FC = () => {
             TOP 8% AMONG U-18 ATHLETES
           </div>
         </header>
+
+        {/* ── Baseline Course Prompt for First-Time Users ─────────── */}
+        {!hasAssessments && (
+          <div style={{
+            background: '#ffffff',
+            border: T.border3,
+            borderLeft: `10px solid ${T.primaryContainer}`,
+            boxShadow: T.shadow6,
+            padding: '1.5rem 2rem',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '1.25rem',
+          }}>
+            <div style={{ maxWidth: '750px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                <Target size={20} color={T.secondary} />
+                <h3 style={{
+                  fontFamily: T.fontHeadline,
+                  fontWeight: 900,
+                  fontSize: '1.2rem',
+                  textTransform: 'uppercase',
+                  color: T.primary,
+                }}>
+                  Initial Baseline Calibration Course Required
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.92rem', color: T.onSurfaceVariant, lineHeight: 1.5 }}>
+                Take your first 10-rep evaluation test in Deep Squats or Pushups to calibrate your joint mobility, symmetry score, and establish your official KreedAI Athlete Index.
+              </p>
+            </div>
+
+            <Link
+              to="/assessment"
+              style={{
+                background: T.primaryContainer,
+                color: T.primary,
+                border: T.border3,
+                boxShadow: '3px 3px 0px 0px #1a1a1a',
+                padding: '0.85rem 1.6rem',
+                fontFamily: T.fontHeadline,
+                fontWeight: 900,
+                fontSize: '0.9rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+              }}
+            >
+              <span>Start Baseline Calibration</span>
+              <ArrowRight size={18} />
+            </Link>
+          </div>
+        )}
 
         {/* ── 2. Asymmetric Hero Bento Grid (Hero CTA + KreedAI Index) ────── */}
         <div style={{
@@ -366,7 +490,7 @@ export const Dashboard: React.FC = () => {
                 display: 'inline-flex',
                 alignItems: 'baseline',
               }}>
-                82
+                {computedScore}
                 <span style={{
                   fontSize: '1.5rem',
                   fontFamily: T.fontHeadline,
@@ -405,13 +529,22 @@ export const Dashboard: React.FC = () => {
                   top: 0,
                   left: 0,
                   height: '100%',
-                  width: '82%',
-                  background: `linear-gradient(90deg, ${T.primary}, ${T.primaryContainer})`,
+                  width: `${computedScore}%`,
+                  background: T.primary,
+                  transition: 'width 0.5s ease',
                 }} />
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', fontWeight: 700, marginTop: '0.4rem', fontFamily: T.fontHeadline }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                marginTop: '0.4rem',
+                fontFamily: T.fontHeadline,
+                color: T.onSurfaceVariant,
+              }}>
                 <span>0 BASE</span>
-                <span>82 ELITE TIER</span>
+                <span>{computedScore} ELITE</span>
                 <span>100 PRO</span>
               </div>
             </div>
