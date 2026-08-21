@@ -17,6 +17,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { OfflineStorage } from '../storage/indexedDB';
 import {
   buildPassportData,
@@ -56,6 +57,7 @@ const T = {
 
 export const Passport: React.FC = () => {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [passport, setPassport] = useState<PassportData>(() => buildPassportData(user, []));
   const [isDownloading, setIsDownloading] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -314,7 +316,7 @@ export const Passport: React.FC = () => {
                 letterSpacing: '0.07em',
                 marginBottom: '0.65rem',
               }}>
-                <FileCheck size={14} /> National Sports Repository Verified
+                <FileCheck size={14} /> {t('pass.portal', 'National Sports Repository Verified')}
               </div>
 
               <h1 style={{
@@ -326,12 +328,11 @@ export const Passport: React.FC = () => {
                 lineHeight: 1,
                 marginBottom: '0.5rem',
               }}>
-                Digital Athlete <span style={{ color: T.tertiary }}>Sports Passport</span>
+                {t('pass.title1', 'Digital Athlete')} <span style={{ color: T.tertiary }}>{t('pass.title2', 'Sports Passport')}</span>
               </h1>
 
               <p style={{ color: T.onSurfaceVariant, fontSize: '0.92rem', maxWidth: '640px', fontWeight: 500 }}>
-                Government & Sports Authority of India (SAI) recognized cryptographic proof of physical benchmarks,
-                biomechanical accuracy, and performance tier.
+                {t('pass.subtitle', 'Government & Sports Authority of India (SAI) recognized cryptographic proof of physical benchmarks, biomechanical accuracy, and performance tier.')}
               </p>
             </div>
 
@@ -343,7 +344,7 @@ export const Passport: React.FC = () => {
                 className="passport-btn passport-btn-surface"
                 title="Share Passport"
               >
-                <Share2 size={15} /> Share
+                <Share2 size={15} /> {t('common.share', 'Share')}
               </button>
 
               <button
@@ -352,7 +353,7 @@ export const Passport: React.FC = () => {
                 className="passport-btn passport-btn-surface"
                 title="Print Passport"
               >
-                <Printer size={15} /> Print
+                <Printer size={15} /> {t('common.print', 'Print')}
               </button>
 
               <button
@@ -363,7 +364,7 @@ export const Passport: React.FC = () => {
                 title="Download Official Certificate PDF"
               >
                 <Download size={16} />
-                {isDownloading ? 'Generating PDF...' : 'Download Certificate'}
+                {isDownloading ? t('pass.generatingPdf', 'Generating PDF...') : t('pass.downloadCert', 'Download Certificate')}
               </button>
             </div>
           </div>
