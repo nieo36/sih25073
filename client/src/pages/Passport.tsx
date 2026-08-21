@@ -272,6 +272,21 @@ export const Passport: React.FC = () => {
           .passport-meta-grid {
             grid-template-columns: 1fr 1fr !important;
           }
+          .passport-actions-bar {
+            width: 100% !important;
+          }
+          .passport-actions-bar button {
+            flex: 1 1 auto !important;
+            justify-content: center !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .passport-meta-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .passport-actions-bar button {
+            width: 100% !important;
+          }
         }
       `}</style>
 

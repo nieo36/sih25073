@@ -1,18 +1,65 @@
 {
+  "id": "com.kreedai.app",
+  "name": "KreedAI - AI Sports Talent Assessment & Scouting Hub",
   "short_name": "KreedAI",
-  "name": "KreedAI - AI Sports Assessment & Scouting Hub",
-  "description": "Government & SAI recognized AI biomechanical assessment, digital sports passport, and national grassroots talent scouting hub.",
-  "icons": [
-    {
-      "src": "/vite.svg",
-      "type": "image/svg+xml",
-      "sizes": "192x192 512x512"
-    }
-  ],
+  "description": "Government & SAI-recognized AI computer vision sports assessment, digital athlete sports passport, and national talent scouting portal.",
   "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
   "background_color": "#f5f0e8",
   "theme_color": "#f5f0e8",
-  "display": "standalone",
-  "orientation": "portrait-primary",
-  "categories": ["sports", "fitness", "productivity", "utilities"]
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["sports", "fitness", "health", "utilities"],
+  "icons": [
+    {
+      "src": "/pwa-192x192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "AI Assessment Studio",
+      "short_name": "Assessment",
+      "description": "Launch real-time AI camera workout evaluation",
+      "url": "/assessment",
+      "icons": [{ "src": "/pwa-192x192.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "Sports Passport",
+      "short_name": "Passport",
+      "description": "View verified athletic biometric credentials",
+      "url": "/sports-passport",
+      "icons": [{ "src": "/pwa-192x192.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "All-India Leaderboard",
+      "short_name": "Leaderboard",
+      "description": "Explore national grassroots athlete rankings",
+      "url": "/leaderboard",
+      "icons": [{ "src": "/pwa-192x192.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "Recruiter Hub",
+      "short_name": "Scout Hub",
+      "description": "Search and scout verified athletic talent",
+      "url": "/recruiter",
+      "icons": [{ "src": "/pwa-192x192.svg", "sizes": "192x192" }]
+    }
+  ]
 }

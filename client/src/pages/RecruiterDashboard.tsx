@@ -398,6 +398,18 @@ export const RecruiterDashboard: React.FC = () => {
             grid-template-columns: 1fr !important;
           }
         }
+
+        @media (max-width: 640px) {
+          .rec-btn {
+            width: 100% !important;
+          }
+          .rec-prompt-presets {
+            overflow-x: auto !important;
+            flex-wrap: nowrap !important;
+            padding-bottom: 4px !important;
+            scrollbar-width: none !important;
+          }
+        }
       `}</style>
 
       <div className="recruiter-page">
@@ -571,7 +583,7 @@ export const RecruiterDashboard: React.FC = () => {
                     flexWrap: 'wrap',
                     gap: '0.5rem',
                   }}>
-                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                    <div className="rec-prompt-presets" style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
                       {[
                         'U-18 Football UP',
                         'Haryana Sprinters 95+',

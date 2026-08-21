@@ -522,19 +522,55 @@ export const Assessment: React.FC = () => {
     }}>
       <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none' }} />
       <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+      <style>{`
+        @media (max-width: 640px) {
+          .assessment-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+          }
+          .assessment-exercise-tabs {
+            width: 100% !important;
+            justify-content: space-between !important;
+            overflow-x: auto !important;
+          }
+          .assessment-exercise-tabs button {
+            flex: 1 !important;
+            padding: 0.5rem 0.6rem !important;
+            font-size: 0.75rem !important;
+          }
+          .assessment-live-metrics {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 0.5rem !important;
+          }
+          .assessment-action-bar {
+            flex-direction: column !important;
+            align-items: stretch !important;
+          }
+          .assessment-action-bar > div {
+            width: 100% !important;
+          }
+          .assessment-action-bar button {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+        }
+      `}</style>
 
       <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '1.5rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         
         {/* Top Header Bar & Exercise Selector */}
-        <header style={{
-          borderBottom: T.border4,
-          paddingBottom: '1rem',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '1rem',
-        }}>
+        <header
+          className="assessment-header"
+          style={{
+            borderBottom: T.border4,
+            paddingBottom: '1rem',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '1rem',
+          }}
+        >
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.2rem' }}>
               <span style={{
@@ -579,14 +615,17 @@ export const Assessment: React.FC = () => {
           </div>
 
           {/* Exercise Selection Tabs */}
-          <div style={{
-            display: 'flex',
-            gap: '0.5rem',
-            background: T.surfaceVariant,
-            padding: '0.35rem',
-            border: T.border3,
-            boxShadow: '3px 3px 0px 0px #1a1a1a',
-          }}>
+          <div
+            className="assessment-exercise-tabs"
+            style={{
+              display: 'flex',
+              gap: '0.5rem',
+              background: T.surfaceVariant,
+              padding: '0.35rem',
+              border: T.border3,
+              boxShadow: '3px 3px 0px 0px #1a1a1a',
+            }}
+          >
             <button
               disabled={isAssessing}
               onClick={() => { setExercise('curl'); setCompleted(false); }}
@@ -861,7 +900,7 @@ export const Assessment: React.FC = () => {
             </div>
 
             {/* Live Metrics Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
+            <div className="assessment-live-metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
               <div style={{ background: T.primaryContainer, border: T.border3, boxShadow: T.shadow4, padding: '0.85rem' }}>
                 <div style={{ fontFamily: T.fontHeadline, fontWeight: 800, fontSize: '0.7rem', textTransform: 'uppercase', color: T.primary }}>
                   Reps
@@ -900,11 +939,14 @@ export const Assessment: React.FC = () => {
             </div>
 
             {/* Action Buttons */}
-            <div style={{
-              background: T.surfaceLowest, border: T.border3, boxShadow: T.shadow6,
-              padding: '1.25rem', display: 'flex', justifyContent: 'space-between',
-              alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem',
-            }}>
+            <div
+              className="assessment-action-bar"
+              style={{
+                background: T.surfaceLowest, border: T.border3, boxShadow: T.shadow6,
+                padding: '1.25rem', display: 'flex', justifyContent: 'space-between',
+                alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem',
+              }}
+            >
               <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
                 {!isAssessing ? (
                   <button

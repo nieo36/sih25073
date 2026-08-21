@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" fill="#f5f0e8" rx="36"/>
+  <!-- Brutalist Outer Card Box -->
+  <rect x="22" y="22" width="148" height="148" fill="#ffcc00" stroke="#1a1a1a" stroke-width="10" rx="14"/>
+  <!-- Offset Shadow Corner Effect -->
+  <path d="M176 32 L176 176 L32 176" fill="none" stroke="#1a1a1a" stroke-width="10" stroke-linecap="square"/>
+  <!-- Bold Lightning Bolt / Zap Icon -->
+  <polygon points="105,38 60,105 98,105 87,154 132,87 94,87" fill="#1a1a1a" stroke="#1a1a1a" stroke-width="4" stroke-linejoin="round"/>
+  <!-- Accent Red Core -->
+  <polygon points="103,48 70,100 96,100 90,136 123,92 97,92" fill="#e63b2e"/>
+</svg>
