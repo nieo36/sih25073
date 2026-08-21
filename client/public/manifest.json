@@ -1,0 +1,18 @@
+{
+  "short_name": "KreedAI",
+  "name": "KreedAI - AI Sports Assessment & Scouting Hub",
+  "description": "Government & SAI recognized AI biomechanical assessment, digital sports passport, and national grassroots talent scouting hub.",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/dashboard",
+  "background_color": "#f5f0e8",
+  "theme_color": "#f5f0e8",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "categories": ["sports", "fitness", "productivity", "utilities"]
+}

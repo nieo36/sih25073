@@ -21,6 +21,7 @@ import {
   Flame,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import {
   fetchLeaderboard,
   filterAndSortAthletes,
@@ -302,6 +303,7 @@ const AthleteRow: React.FC<AthleteRowProps> = ({ athlete, displayRank, metric, s
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export const Leaderboard: React.FC = () => {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [allAthletes, setAllAthletes] = useState<LeaderboardAthlete[]>([]);
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
@@ -388,17 +390,17 @@ export const Leaderboard: React.FC = () => {
               fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase',
               letterSpacing: '0.07em', marginBottom: '0.9rem',
             }}>
-              <Award size={13} /> National Talent Identification Portal
+              <Award size={13} /> {t('lb.portal', 'National Talent Identification Portal')}
             </div>
             <h1 style={{
               fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900,
               fontSize: 'clamp(2.2rem,6vw,4.2rem)', lineHeight: 0.95,
               textTransform: 'uppercase', letterSpacing: '-0.04em', marginBottom: '0.75rem',
             }}>
-              All-India <br /><span style={{ color: '#0055ff' }}>Leaderboard</span>
+              {t('lb.title1', 'All-India')} <br /><span style={{ color: '#0055ff' }}>{t('lb.title2', 'Leaderboard')}</span>
             </h1>
             <p style={{ fontSize: '0.9rem', fontWeight: 500, color: '#4a4a4a', maxWidth: '540px' }}>
-              Rankings verified via computer vision biomechanical analysis for SAI talent scouts.{' '}
+              {t('lb.subtitle', 'Rankings verified via computer vision biomechanical analysis for SAI talent scouts.')}{' '}
               <strong>{myPosition.totalAthletes.toLocaleString()}</strong> athletes competing nationally.
             </p>
           </div>

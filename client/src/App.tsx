@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { LanguageProvider } from './context/LanguageContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Navbar } from './components/Navbar';
 import { Login } from './pages/Login';
@@ -18,8 +19,9 @@ import { Passport } from './pages/Passport';
 
 export const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <Router>
+    <LanguageProvider>
+      <AuthProvider>
+        <Router>
         <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
           <Navbar />
           <main style={{ flex: 1, paddingBottom: '3rem' }}>
@@ -95,6 +97,7 @@ export const App: React.FC = () => {
         </div>
       </Router>
     </AuthProvider>
+    </LanguageProvider>
   );
 };
 

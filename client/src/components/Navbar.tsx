@@ -11,9 +11,10 @@ import {
   User,
   LogIn,
   ShieldCheck,
-  Zap
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 
 // ── Scoped Neo-Brutalist Theme Tokens ──────────────────────────────
 const T = {
@@ -39,14 +40,15 @@ export const Navbar: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isAuthenticated, logout } = useAuth();
+  const { language, setLanguage, t } = useLanguage();
 
   const navLinks = [
-    { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/assessment', label: 'AI Assessment', icon: Camera },
-    { to: '/progress', label: 'Analytics', icon: BarChart2 },
-    { to: '/leaderboard', label: 'Leaderboard', icon: Award },
-    { to: '/sports-passport', label: 'Sports Passport', icon: FileCheck },
-    { to: '/recruiter', label: 'Recruiter Hub', icon: ShieldAlert },
+    { to: '/dashboard', label: t('nav.dashboard', 'Dashboard'), icon: LayoutDashboard },
+    { to: '/assessment', label: t('nav.assessment', 'AI Assessment'), icon: Camera },
+    { to: '/progress', label: t('nav.analytics', 'Analytics'), icon: BarChart2 },
+    { to: '/leaderboard', label: t('nav.leaderboard', 'Leaderboard'), icon: Award },
+    { to: '/sports-passport', label: t('nav.passport', 'Sports Passport'), icon: FileCheck },
+    { to: '/recruiter', label: t('nav.recruiter', 'Recruiter Hub'), icon: ShieldAlert },
   ];
 
   const handleLogout = async (e: React.MouseEvent) => {
@@ -70,16 +72,16 @@ export const Navbar: React.FC = () => {
       boxShadow: '0 2px 0px 0px rgba(26,26,26,0.1)',
     }}>
       <div style={{
-        maxWidth: '1280px',
+        maxWidth: '1380px',
         margin: '0 auto',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '0.85rem',
+        flexWrap: 'nowrap',
+        gap: '1rem',
       }}>
         {/* Brand Logo */}
-        <Link to="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', textDecoration: 'none' }}>
+        <Link to="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', textDecoration: 'none', flexShrink: 0 }}>
           <div style={{
             background: T.primaryContainer,
             width: '36px',
@@ -124,7 +126,10 @@ export const Navbar: React.FC = () => {
           alignItems: 'center',
           gap: '0.35rem',
           overflowX: 'auto',
+          scrollbarWidth: 'none',
           padding: '0.2rem 0',
+          flex: '1 1 auto',
+          justifyContent: 'center',
         }}>
           {navLinks.map((item) => {
             const Icon = item.icon;
@@ -151,6 +156,7 @@ export const Navbar: React.FC = () => {
                   boxShadow: isActive ? T.shadow2 : 'none',
                   transition: 'all 0.15s ease',
                   whiteSpace: 'nowrap',
+                  flexShrink: 0,
                 }}
                 onMouseEnter={(e) => {
                   if (!isActive) {
@@ -172,8 +178,69 @@ export const Navbar: React.FC = () => {
           })}
         </div>
 
-        {/* User Account / Auth Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+        {/* Language Switcher & User Account / Auth Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexShrink: 0 }}>
+          {/* Fixed-Width Language Toggle */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            border: T.border2,
+            boxShadow: T.shadow2,
+            background: T.surfaceLowest,
+            height: '34px',
+            boxSizing: 'border-box',
+          }}>
+            <button
+              type="button"
+              onClick={() => setLanguage('en')}
+              style={{
+                width: '42px',
+                height: '100%',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.75rem',
+                fontFamily: T.fontHeadline,
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                background: language === 'en' ? T.primaryContainer : 'transparent',
+                color: T.primary,
+                border: 'none',
+                borderRight: T.border2,
+                cursor: 'pointer',
+                transition: 'background 0.1s ease',
+                boxSizing: 'border-box',
+              }}
+              title="Switch to English"
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              onClick={() => setLanguage('hi')}
+              style={{
+                width: '42px',
+                height: '100%',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.75rem',
+                fontFamily: T.fontHeadline,
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                background: language === 'hi' ? T.primaryContainer : 'transparent',
+                color: T.primary,
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'background 0.1s ease',
+                boxSizing: 'border-box',
+              }}
+              title="हिंदी में बदलें"
+            >
+              हिन्दी
+            </button>
+          </div>
+
           {isAuthenticated && user ? (
             <>
               <div
