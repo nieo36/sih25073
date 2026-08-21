@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { OfflineStorage } from '../storage/indexedDB';
+import { ApiService, AthleteStatsResponse } from '../services/api';
 
 const T = {
   bg: '#f5f0e8',
@@ -47,20 +48,32 @@ const T = {
 export const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const [assessments, setAssessments] = useState<any[]>([]);
+  const [serverStats, setServerStats] = useState<AthleteStatsResponse | null>(null);
 
   useEffect(() => {
+    // Load both local indexedDB and live backend stats
     OfflineStorage.getAllAssessments().then(setAssessments).catch(() => {});
-  }, []);
+    ApiService.getAthleteStats().then((data) => {
+      if (data) setServerStats(data);
+    }).catch(() => {});
+  }, [user]);
 
   const athleteName = user?.name || 'Aarav Sharma';
   const firstName = athleteName.split(' ')[0];
   const primarySport = user?.profile?.primarySport || 'Athletics';
   const userPhoto = user?.profile?.profilePhoto || user?.profilePhoto || user?.avatar;
 
-  const hasAssessments = assessments.length > 0;
-  const computedScore = hasAssessments
-    ? Math.round(assessments.reduce((acc, a) => acc + (a.totalScore || 0), 0) / assessments.length)
-    : 82;
+  const hasAssessments = assessments.length > 0 || (serverStats && serverStats.completedCount > 0);
+
+  const overallScore = hasAssessments
+    ? (serverStats?.overallScore ?? Math.round(assessments.reduce((acc, a) => acc + (a.totalScore || 0), 0) / assessments.length))
+    : 0;
+
+  const speedScore = hasAssessments ? (serverStats?.metrics?.speed ?? 0) : 0;
+  const agilityScore = hasAssessments ? (serverStats?.metrics?.agility ?? 0) : 0;
+  const formAccuracy = hasAssessments ? (serverStats?.metrics?.formPrecision ?? 0) : 0;
+  const eloRating = hasAssessments ? (serverStats?.eloRating ?? 0) : 0;
+  const tier = hasAssessments ? (serverStats?.tier ?? 'PLATINUM') : 'UNASSESSED';
 
   return (
     <div style={{
@@ -484,7 +497,7 @@ export const Dashboard: React.FC = () => {
                 display: 'inline-flex',
                 alignItems: 'baseline',
               }}>
-                {computedScore}
+                {overallScore}
                 <span style={{
                   fontSize: '1.5rem',
                   fontFamily: T.fontHeadline,
@@ -522,7 +535,7 @@ export const Dashboard: React.FC = () => {
                   top: 0,
                   left: 0,
                   height: '100%',
-                  width: `${computedScore}%`,
+                  width: `${overallScore}%`,
                   background: T.primary,
                   transition: 'width 0.5s ease',
                 }} />
@@ -537,7 +550,7 @@ export const Dashboard: React.FC = () => {
                 color: T.onSurfaceVariant,
               }}>
                 <span>0 BASE</span>
-                <span>{computedScore} ELITE</span>
+                <span>{overallScore} ELITE</span>
                 <span>100 PRO</span>
               </div>
             </div>
@@ -597,7 +610,7 @@ export const Dashboard: React.FC = () => {
               </div>
               <div style={{ margin: '1rem 0 0.5rem' }}>
                 <div style={{ fontFamily: T.fontHeadline, fontSize: '2.5rem', fontWeight: 900, lineHeight: 1 }}>
-                  95 <span style={{ fontSize: '1rem', color: T.onSurfaceVariant, fontWeight: 700 }}>/100</span>
+                  {speedScore} <span style={{ fontSize: '1rem', color: T.onSurfaceVariant, fontWeight: 700 }}>/100</span>
                 </div>
                 <p style={{ fontSize: '0.8rem', color: '#059669', fontWeight: 600, marginTop: '0.25rem' }}>
                   +5.4% fast-twitch response
@@ -625,7 +638,7 @@ export const Dashboard: React.FC = () => {
               </div>
               <div style={{ margin: '1rem 0 0.5rem' }}>
                 <div style={{ fontFamily: T.fontHeadline, fontSize: '2.5rem', fontWeight: 900, lineHeight: 1 }}>
-                  89 <span style={{ fontSize: '1rem', color: T.onSurfaceVariant, fontWeight: 700 }}>/100</span>
+                  {agilityScore} <span style={{ fontSize: '1rem', color: T.onSurfaceVariant, fontWeight: 700 }}>/100</span>
                 </div>
                 <p style={{ fontSize: '0.8rem', color: T.onSurfaceVariant, fontWeight: 600, marginTop: '0.25rem' }}>
                   Top 6% hip & knee mobility
@@ -653,7 +666,7 @@ export const Dashboard: React.FC = () => {
               </div>
               <div style={{ margin: '1rem 0 0.5rem' }}>
                 <div style={{ fontFamily: T.fontHeadline, fontSize: '2.5rem', fontWeight: 900, lineHeight: 1 }}>
-                  94.2%
+                  {formAccuracy}%
                 </div>
                 <p style={{ fontSize: '0.8rem', color: T.onSurfaceVariant, fontWeight: 600, marginTop: '0.25rem' }}>
                   Anti-cheat depth verified
@@ -681,10 +694,10 @@ export const Dashboard: React.FC = () => {
               </div>
               <div style={{ margin: '1rem 0 0.5rem' }}>
                 <div style={{ fontFamily: T.fontHeadline, fontSize: '2.5rem', fontWeight: 900, lineHeight: 1 }}>
-                  1,850
+                  {eloRating.toLocaleString()}
                 </div>
                 <p style={{ fontSize: '0.8rem', color: T.tertiary, fontWeight: 700, marginTop: '0.25rem' }}>
-                  Platinum Tier
+                  {tier} Tier
                 </p>
               </div>
             </div>
@@ -805,6 +818,67 @@ export const Dashboard: React.FC = () => {
                 </div>
                 <p style={{ fontSize: '0.9rem', color: T.onSurfaceVariant, lineHeight: 1.5 }}>
                   Measures pectoral power, elbow flexion angle, shoulder stabilization, and anti-sagging trunk alignment across continuous cadenced repetitions.
+                </p>
+              </div>
+
+              <Link
+                to="/assessment"
+                style={{
+                  width: '100%',
+                  background: T.primary,
+                  color: T.onPrimary,
+                  fontFamily: T.fontHeadline,
+                  fontWeight: 800,
+                  fontSize: '0.95rem',
+                  textTransform: 'uppercase',
+                  padding: '0.85rem',
+                  border: T.border3,
+                  boxShadow: T.shadow4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  textDecoration: 'none',
+                }}
+              >
+                <Play size={16} fill="#fff" /> Begin Test
+              </Link>
+            </div>
+
+            {/* Dumbbell Curl Biomechanics Card */}
+            <div style={{
+              background: T.surfaceLowest,
+              border: T.border3,
+              boxShadow: T.shadow6,
+              padding: '1.5rem',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              gap: '1.25rem',
+            }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div style={{ background: T.tertiaryContainer, border: T.border2, padding: '0.4rem' }}>
+                      <Dumbbell size={20} color={T.tertiary} />
+                    </div>
+                    <h3 style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '1.2rem', textTransform: 'uppercase' }}>
+                      Dumbbell Curl
+                    </h3>
+                  </div>
+                  <span style={{
+                    background: T.surfaceVariant,
+                    border: T.border2,
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    padding: '0.2rem 0.45rem',
+                    fontFamily: T.fontHeadline,
+                  }}>
+                    UPPER STRENGTH & ROM
+                  </span>
+                </div>
+                <p style={{ fontSize: '0.9rem', color: T.onSurfaceVariant, lineHeight: 1.5 }}>
+                  Evaluates arm curl range of motion, elbow stability, torso anti-momentum, and lowering tempo control via MediaPipe skeleton.
                 </p>
               </div>
 

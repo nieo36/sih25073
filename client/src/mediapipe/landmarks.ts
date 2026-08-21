@@ -113,3 +113,18 @@ export function areLandmarksVisible(
     return point && (point.visibility === undefined || point.visibility >= threshold);
   });
 }
+
+/**
+ * Validates if a person is in frame with acceptable core landmark visibility
+ */
+export function isPersonDetectedInFrame(landmarks: NormalizedLandmark[]): boolean {
+  if (!landmarks || landmarks.length < 33) return false;
+  const coreIndices = [
+    PoseLandmark.LEFT_SHOULDER,
+    PoseLandmark.RIGHT_SHOULDER,
+    PoseLandmark.LEFT_HIP,
+    PoseLandmark.RIGHT_HIP,
+  ];
+  return areLandmarksVisible(landmarks, coreIndices, 0.45);
+}
+

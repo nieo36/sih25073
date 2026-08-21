@@ -34,6 +34,8 @@ export const AuthCallback: React.FC = () => {
       const role = searchParams.get('role') || 'user';
       const id = searchParams.get('id') || `usr-${Date.now()}`;
       const isEmailVerified = searchParams.get('isEmailVerified') === 'true';
+      const isNewUser = searchParams.get('isNewUser') === 'true';
+      const isProfileComplete = searchParams.get('isProfileComplete') === 'true';
       const error = searchParams.get('error');
 
       if (error) {
@@ -57,8 +59,12 @@ export const AuthCallback: React.FC = () => {
           if (isMounted) {
             setStatus('success');
             timer = setTimeout(() => {
-              // Direct new OAuth users to complete their athlete passport onboarding
-              navigate('/register?oauth=true', { replace: true });
+              // New users or users with incomplete profiles must complete onboarding first
+              if (isNewUser || !isProfileComplete) {
+                navigate('/register?oauth=true', { replace: true });
+              } else {
+                navigate('/dashboard', { replace: true });
+              }
             }, 1000);
           }
         } catch (err: any) {

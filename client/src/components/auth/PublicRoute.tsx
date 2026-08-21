@@ -14,7 +14,12 @@ export const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
     return null;
   }
 
-  if (isAuthenticated) {
+  // Allow authenticated OAuth users to access /register?oauth=true for onboarding
+  const isOAuthOnboarding =
+    location.pathname === '/register' &&
+    new URLSearchParams(location.search).get('oauth') === 'true';
+
+  if (isAuthenticated && !isOAuthOnboarding) {
     const from = (location.state as any)?.from?.pathname || '/dashboard';
     return <Navigate to={from} replace />;
   }

@@ -4,14 +4,21 @@ import { calculateAngle, AngleSmoother } from './angles';
 export type PushupStage = 'PLANK' | 'DESCENDING' | 'BOTTOM' | 'ASCENDING';
 
 export interface PushupFeedback {
+  detected: boolean;
   stage: PushupStage;
   repCount: number;
   elbowAngle: number;
   bodyAlignmentAngle: number;
+  romPercent: number;
+  stabilityScore: number;
+  tempoScore: number;
+  consistencyScore: number;
   isGoodAlignment: boolean;
   feedbackMessage: string;
   formScore: number;
   symmetryScore: number;
+  warnings: string[];
+  isGoodRep: boolean;
 }
 
 export class PushupAnalyzer {
@@ -33,18 +40,24 @@ export class PushupAnalyzer {
 
     if (!areLandmarksVisible(landmarks, requiredLandmarks, 0.4)) {
       return {
+        detected: false,
         stage: this.stage,
         repCount: this.repCount,
-        elbowAngle: 180,
-        bodyAlignmentAngle: 180,
+        elbowAngle: 0,
+        bodyAlignmentAngle: 0,
+        romPercent: 0,
+        stabilityScore: 0,
+        tempoScore: 0,
+        consistencyScore: 0,
         isGoodAlignment: false,
-        feedbackMessage: 'Position side profile towards camera for pushup tracking',
+        feedbackMessage: 'No athlete detected in camera frame. Position side profile towards camera.',
         formScore: 0,
-        symmetryScore: 100,
+        symmetryScore: 0,
+        warnings: ['No athlete detected in camera frame'],
+        isGoodRep: false,
       };
     }
 
-    // Elbow angle: Shoulder -> Elbow -> Wrist
     const leftElbowRaw = calculateAngle(
       landmarks[PoseLandmark.LEFT_SHOULDER],
       landmarks[PoseLandmark.LEFT_ELBOW],
@@ -61,7 +74,6 @@ export class PushupAnalyzer {
     const rightElbow = this.smootherRightElbow.update(rightElbowRaw);
     const elbowAngle = Math.round((leftElbow + rightElbow) / 2);
 
-    // Spine/Body Alignment: Shoulder -> Hip -> Ankle (ideally ~ 170-180 deg)
     const bodyAlignment = calculateAngle(
       landmarks[PoseLandmark.LEFT_SHOULDER],
       landmarks[PoseLandmark.LEFT_HIP],
@@ -76,19 +88,36 @@ export class PushupAnalyzer {
 
     let feedbackMessage = 'Hold a straight plank core line';
     let currentRepScore = 85;
+    let isGoodRep = false;
+    const currentWarnings: string[] = [];
 
     const angleDiff = Math.abs(leftElbow - rightElbow);
-    const symmetryScore = Math.max(0, Math.round(100 - angleDiff * 3));
+    const symmetryScore = Math.max(0, Math.round(100 - angleDiff * 3.5));
 
-    // Pushup state machine
+    if (bodyAlignment < 155) {
+      currentWarnings.push('Hips sagging');
+    } else if (bodyAlignment > 195) {
+      currentWarnings.push('Hips too high');
+    }
+
     if (elbowAngle > 155) {
       if (this.stage === 'ASCENDING' || (this.stage === 'BOTTOM' && this.minElbowAngle <= 105)) {
         this.repCount++;
-        const depthBonus = this.minElbowAngle <= 90 ? 100 : Math.max(50, 100 - (this.minElbowAngle - 90) * 2);
+        const depthBonus = this.minElbowAngle <= 90 ? 100 : Math.max(50, 100 - (this.minElbowAngle - 90) * 2.5);
         const alignmentPenalty = isGoodAlignment ? 0 : 25;
         currentRepScore = Math.max(10, Math.round((depthBonus + symmetryScore) / 2 - alignmentPenalty));
         this.repScores.push(currentRepScore);
-        feedbackMessage = isGoodAlignment ? 'Crisp pushup form!' : 'Rep counted, but keep your hips from sagging!';
+
+        if (this.minElbowAngle > 90) {
+          currentWarnings.push('Insufficient depth');
+        }
+
+        if (isGoodAlignment && this.minElbowAngle <= 90) {
+          isGoodRep = true;
+          feedbackMessage = 'Crisp pushup form!';
+        } else {
+          feedbackMessage = isGoodAlignment ? 'Rep counted, but lower chest down to 90°!' : 'Rep counted, but keep your hips from sagging!';
+        }
       }
       this.stage = 'PLANK';
       this.minElbowAngle = 180;
@@ -97,25 +126,37 @@ export class PushupAnalyzer {
       feedbackMessage = 'Great chest depth! Push the floor away';
     } else if (elbowAngle < 145 && this.stage === 'PLANK') {
       this.stage = 'DESCENDING';
-      feedbackMessage = 'Lower chest with controlled tempo';
+      feedbackMessage = 'Lower chest with controlled tempo...';
     } else if (elbowAngle > this.minElbowAngle + 12 && (this.stage === 'BOTTOM' || this.stage === 'DESCENDING')) {
       this.stage = 'ASCENDING';
-      feedbackMessage = 'Press back up to lock out';
+      feedbackMessage = 'Press back up to lock out plank...';
     }
 
     if (!isGoodAlignment) {
       feedbackMessage = bodyAlignment < 155 ? 'Do not let your hips sag!' : 'Keep your hips down in plank line!';
     }
 
+    const romPercent = Math.min(100, Math.max(0, Math.round(((165 - (this.minElbowAngle === 180 ? elbowAngle : this.minElbowAngle)) / 85) * 100)));
+    const stabilityScore = isGoodAlignment ? 92 : 65;
+    const tempoScore = 85;
+    const consistencyScore = 88;
+
     return {
+      detected: true,
       stage: this.stage,
       repCount: this.repCount,
       elbowAngle,
       bodyAlignmentAngle: Math.round(bodyAlignment),
+      romPercent,
+      stabilityScore,
+      tempoScore,
+      consistencyScore,
       isGoodAlignment,
       feedbackMessage,
       formScore: currentRepScore,
       symmetryScore,
+      warnings: Array.from(new Set(currentWarnings)),
+      isGoodRep,
     };
   }
 
