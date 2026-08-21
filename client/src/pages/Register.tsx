@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, ArrowRight, Check, ChevronDown, Eye, EyeOff,
   Globe, User, Camera, Trophy, Shield, Lock, Award, Mail,
@@ -8,7 +8,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 /* ─────────────────────────────────────────────
-   VYOMA Register — Athlete Onboarding
+   KreedAI Register — Athlete Onboarding
    Magic Link Email Verification at the end
    (Auto-verifies in 10s for demo testing)
    Stitch project 16542555991833173009
@@ -61,22 +61,16 @@ interface SportOption {
 }
 
 const SPORTS_LIST: SportOption[] = [
-  { id: 'Athletics & Track', name: 'Athletics & Track', category: 'Speed & Endurance', emoji: '🏃' },
-  { id: 'Football', name: 'Football (Soccer)', category: 'Team Sport', emoji: '⚽' },
-  { id: 'Cricket', name: 'Cricket', category: 'Bat & Ball', emoji: '🏏' },
-  { id: 'Badminton', name: 'Badminton', category: 'Racket Sport', emoji: '🏸' },
-  { id: 'Basketball', name: 'Basketball', category: 'Court & Agility', emoji: '🏀' },
-  { id: 'Swimming', name: 'Swimming', category: 'Aquatic Speed', emoji: '🏊' },
-  { id: 'Boxing', name: 'Boxing', category: 'Combat & Power', emoji: '🥊' },
+  { id: 'Athletics', name: 'Athletics & Track', category: 'Speed & Track', emoji: '🏃' },
+  { id: 'Football', name: 'Football (Soccer)', category: 'Team & Agility', emoji: '⚽' },
+  { id: 'Badminton', name: 'Badminton', category: 'Racket & Reflexes', emoji: '🏸' },
+  { id: 'Basketball', name: 'Basketball', category: 'Court & Power', emoji: '🏀' },
+  { id: 'Volleyball', name: 'Volleyball', category: 'Vertical Jump & Power', emoji: '🏐' },
+  { id: 'Boxing', name: 'Boxing', category: 'Combat & Speed', emoji: '🥊' },
   { id: 'Wrestling', name: 'Wrestling', category: 'Mat & Strength', emoji: '🤼' },
-  { id: 'Kabaddi', name: 'Kabaddi', category: 'Contact & Reflexes', emoji: '⚡' },
-  { id: 'Tennis', name: 'Tennis', category: 'Racket & Precision', emoji: '🎾' },
-  { id: 'Hockey', name: 'Field Hockey', category: 'Stick & Speed', emoji: '🏑' },
   { id: 'Weightlifting', name: 'Weightlifting', category: 'Pure Strength', emoji: '🏋️' },
+  { id: 'Hockey', name: 'Field Hockey', category: 'Stick & Precision', emoji: '🏑' },
   { id: 'Archery', name: 'Archery', category: 'Precision & Focus', emoji: '🎯' },
-  { id: 'Cycling', name: 'Cycling', category: 'Velodrome & Road', emoji: '🚴' },
-  { id: 'Table Tennis', name: 'Table Tennis', category: 'Fast Reflexes', emoji: '🏓' },
-  { id: 'Volleyball', name: 'Volleyball', category: 'Vertical Jump', emoji: '🏐' },
 ];
 
 // ── Form State Interface ──────────────────────
@@ -119,7 +113,7 @@ interface FormData {
 const initialFormData: FormData = {
   fullName: '', email: '', password: '', confirmPassword: '',
   age: '', gender: '', height: '', weight: '', country: 'in', state: '', city: '', areaType: 'urban',
-  primarySport: 'Athletics & Track', secondarySports: '', experienceLevel: 'intermediate', yearsExperience: '', athleticGoals: '',
+  primarySport: 'Athletics', secondarySports: '', experienceLevel: 'intermediate', yearsExperience: '', athleticGoals: '',
   dominantHand: 'right', dominantFoot: 'right', organization: '', achievements: '', bio: '', trainingFrequency: '3-4',
   movementInsights: true, highlightProcessing: true, recruiterDiscoverability: true, profileVisibility: 'verified', guardianConsent: false,
 };
@@ -218,7 +212,11 @@ const neoSecondary: React.CSSProperties = {
 //  REGISTER COMPONENT
 // ══════════════════════════════════════════════
 export const Register: React.FC = () => {
-  const [currentStep, setCurrentStep] = useState(0);
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const isOAuth = searchParams.get('oauth') === 'true';
+
+  const [currentStep, setCurrentStep] = useState(isOAuth ? 1 : 0);
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -229,7 +227,22 @@ export const Register: React.FC = () => {
   const [profilePhotoPreview, setProfilePhotoPreview] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { register: registerUser, loginWithGoogle } = useAuth();
+  const { user, register: registerUser, loginWithGoogle, saveProfile, updateUser } = useAuth();
+
+  // Pre-fill user data if OAuth user
+  useEffect(() => {
+    if (isOAuth && user) {
+      setFormData((prev) => ({
+        ...prev,
+        fullName: user.name || prev.fullName,
+        email: user.email || prev.email,
+        primarySport: user.profile?.primarySport || prev.primarySport,
+      }));
+      if (user.profile?.profilePhoto || user.profilePhoto || user.avatar) {
+        setProfilePhotoPreview(user.profile?.profilePhoto || user.profilePhoto || user.avatar || null);
+      }
+    }
+  }, [isOAuth, user]);
 
   // ── Magic Link Email Verification State ──────────
   const [isEmailVerified, setIsEmailVerified] = useState(false);
@@ -275,7 +288,7 @@ export const Register: React.FC = () => {
     const errs: Partial<Record<keyof FormData, string>> = {};
     const step = STEPS[currentStep].key;
 
-    if (step === 'account') {
+    if (step === 'account' && !isOAuth) {
       if (!formData.fullName.trim()) errs.fullName = 'Full name is required';
       if (!formData.email.trim()) errs.email = 'Email address is required';
       else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) errs.email = 'Please enter a valid email address';
@@ -302,13 +315,43 @@ export const Register: React.FC = () => {
   const next = async () => {
     if (!validateStep()) return;
 
-    if (currentStep === 0) {
+    if (currentStep === 0 && !isOAuth) {
       setSubmitting(true);
       try {
         await registerUser({
           name: formData.fullName.trim(),
           email: formData.email.trim(),
           password: formData.password,
+          profile: {
+            age: formData.age ? Number(formData.age) : undefined,
+            gender: formData.gender,
+            height: formData.height,
+            weight: formData.weight,
+            country: formData.country,
+            state: formData.state,
+            city: formData.city,
+            areaType: formData.areaType,
+            primarySport: formData.primarySport,
+            secondarySports: formData.secondarySports,
+            experienceLevel: formData.experienceLevel,
+            yearsExperience: formData.yearsExperience,
+            athleticGoals: formData.athleticGoals,
+            dominantHand: formData.dominantHand,
+            dominantFoot: formData.dominantFoot,
+            organization: formData.organization,
+            achievements: formData.achievements,
+            bio: formData.bio,
+            trainingFrequency: formData.trainingFrequency,
+            profilePhoto: profilePhotoPreview || undefined,
+            avatar: profilePhotoPreview || undefined,
+          },
+          privacy: {
+            movementInsights: formData.movementInsights,
+            highlightProcessing: formData.highlightProcessing,
+            recruiterDiscoverability: formData.recruiterDiscoverability,
+            profileVisibility: formData.profileVisibility,
+            guardianConsent: formData.guardianConsent,
+          },
         });
       } catch (err: any) {
         const msg = err?.message || 'Registration failed';
@@ -327,6 +370,52 @@ export const Register: React.FC = () => {
       setSubmitting(false);
     }
 
+    if (currentStep > 0 && currentStep <= 4) {
+      try {
+        await saveProfile({
+          name: formData.fullName,
+          profile: {
+            age: formData.age ? Number(formData.age) : undefined,
+            gender: formData.gender,
+            height: formData.height,
+            weight: formData.weight,
+            country: formData.country,
+            state: formData.state,
+            city: formData.city,
+            areaType: formData.areaType,
+            primarySport: formData.primarySport,
+            secondarySports: formData.secondarySports,
+            experienceLevel: formData.experienceLevel,
+            yearsExperience: formData.yearsExperience,
+            athleticGoals: formData.athleticGoals,
+            dominantHand: formData.dominantHand,
+            dominantFoot: formData.dominantFoot,
+            organization: formData.organization,
+            achievements: formData.achievements,
+            bio: formData.bio,
+            trainingFrequency: formData.trainingFrequency,
+            profilePhoto: profilePhotoPreview || undefined,
+            avatar: profilePhotoPreview || undefined,
+          },
+          privacy: {
+            movementInsights: formData.movementInsights,
+            highlightProcessing: formData.highlightProcessing,
+            recruiterDiscoverability: formData.recruiterDiscoverability,
+            profileVisibility: formData.profileVisibility,
+            guardianConsent: formData.guardianConsent,
+          },
+        });
+      } catch {
+        // Continue locally
+      }
+
+      // If OAuth user finishes step 4 (privacy), go directly to Dashboard
+      if (isOAuth && currentStep === 4) {
+        navigate('/dashboard', { replace: true });
+        return;
+      }
+    }
+
     if (currentStep < STEPS.length - 1) {
       const nextStep = currentStep + 1;
       setCurrentStep(nextStep);
@@ -340,7 +429,8 @@ export const Register: React.FC = () => {
   };
 
   const back = () => {
-    if (currentStep > 0) {
+    const minStep = isOAuth ? 1 : 0;
+    if (currentStep > minStep) {
       setCurrentStep((s) => s - 1);
       setErrors({});
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -375,7 +465,19 @@ export const Register: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = () => setProfilePhotoPreview(reader.result as string);
+      reader.onload = () => {
+        const photo = reader.result as string;
+        setProfilePhotoPreview(photo);
+        updateUser({
+          avatar: photo,
+          profilePhoto: photo,
+          profile: {
+            ...(user?.profile || {}),
+            profilePhoto: photo,
+            avatar: photo,
+          },
+        });
+      };
       reader.readAsDataURL(file);
     }
   };
@@ -446,7 +548,7 @@ export const Register: React.FC = () => {
               color: T.primary,
             }}
           >
-            VYOMA
+            KREEDAI
           </h1>
         </div>
 
@@ -551,7 +653,7 @@ export const Register: React.FC = () => {
 
           {/* ── Desktop Stepper ───────────────── */}
           <div
-            className="vyoma-stepper-desktop"
+            className="kreedai-stepper-desktop"
             style={{
               display: 'none',
               justifyContent: 'center',
@@ -582,7 +684,7 @@ export const Register: React.FC = () => {
                 }}
               >
                 {i < currentStep ? <Check size={13} /> : <span>{String(i + 1).padStart(2, '0')}</span>}
-                <span className="vyoma-step-label">{s.label}</span>
+                <span className="kreedai-step-label">{s.label}</span>
               </button>
             ))}
           </div>
@@ -597,10 +699,10 @@ export const Register: React.FC = () => {
               padding: '1.5rem 0 2rem',
               alignItems: 'start',
             }}
-            className="vyoma-content-grid"
+            className="kreedai-content-grid"
           >
             {/* Left column: headline (desktop only) */}
-            <div className="vyoma-hero-col" style={{ display: 'none' }}>
+            <div className="kreedai-hero-col" style={{ display: 'none' }}>
               <div style={{ position: 'sticky', top: '120px' }}>
                 <span
                   style={{
@@ -700,7 +802,7 @@ export const Register: React.FC = () => {
             {/* Right column: form */}
             <div>
               {/* Mobile headline */}
-              <div className="vyoma-mobile-hero" style={{ marginBottom: '1.5rem' }}>
+              <div className="kreedai-mobile-hero" style={{ marginBottom: '1.5rem' }}>
                 <h2
                   style={{
                     fontFamily: T.fontHeadline,
@@ -1441,7 +1543,7 @@ export const Register: React.FC = () => {
                             Verified Successfully! ✓
                           </h3>
                           <p style={{ fontSize: '0.95rem', color: T.onSurfaceVariant, marginTop: '0.5rem' }}>
-                            Your email has been confirmed. Your VYOMA Sports Passport is now active.
+                            Your email has been confirmed. Your KreedAI Sports Passport is now active.
                           </p>
                         </>
                       ) : (
@@ -1492,7 +1594,7 @@ export const Register: React.FC = () => {
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.5rem' }}>
-                          <Loader2 size={18} color={T.tertiary} className="vyoma-spin" />
+                          <Loader2 size={18} color={T.tertiary} className="kreedai-spin" />
                           <span style={{ fontFamily: T.fontHeadline, fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase' }}>
                             Waiting for link confirmation...
                           </span>
@@ -1696,7 +1798,7 @@ export const Register: React.FC = () => {
                   >
                     {submitting ? (
                       <>
-                        <Loader2 size={20} className="vyoma-spin" />
+                        <Loader2 size={20} className="kreedai-spin" />
                         Creating Account…
                       </>
                     ) : (
@@ -1766,21 +1868,21 @@ export const Register: React.FC = () => {
 
       {/* Responsive and Animation Styles */}
       <style>{`
-        @keyframes vyomaSpin {
+        @keyframes kreedaiSpin {
           from { transform: rotate(0deg); }
           to   { transform: rotate(360deg); }
         }
-        .vyoma-spin {
-          animation: vyomaSpin 1.5s linear infinite;
+        .kreedai-spin {
+          animation: kreedaiSpin 1.5s linear infinite;
         }
         @media (min-width: 900px) {
-          .vyoma-stepper-desktop { display: flex !important; }
-          .vyoma-content-grid { grid-template-columns: 5fr 7fr !important; }
-          .vyoma-hero-col { display: block !important; }
-          .vyoma-mobile-hero { display: none !important; }
+          .kreedai-stepper-desktop { display: flex !important; }
+          .kreedai-content-grid { grid-template-columns: 5fr 7fr !important; }
+          .kreedai-hero-col { display: block !important; }
+          .kreedai-mobile-hero { display: none !important; }
         }
         @media (max-width: 899px) {
-          .vyoma-step-label { display: none; }
+          .kreedai-step-label { display: none; }
         }
       `}</style>
     </div>

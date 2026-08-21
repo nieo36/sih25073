@@ -4,7 +4,7 @@ import { Eye, EyeOff, Mail, ChevronDown, Globe, CheckCircle2, AlertCircle, KeyRo
 import { useAuth } from '../context/AuthContext';
 
 /* ─────────────────────────────────────────────
-   VYOMA Login — Bauhaus V2 / Neo-Brutalist
+   KreedAI Login — Bauhaus V2 / Neo-Brutalist
    Stitch project 16542555991833173009
    ───────────────────────────────────────────── */
 
@@ -106,7 +106,7 @@ export const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [infoNotice, setInfoNotice] = useState<string | null>(null);
 
-  const { login, loginWithGoogle } = useAuth();
+  const { login, loginWithGoogle, isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -148,12 +148,16 @@ export const Login: React.FC = () => {
       navigate(from, { replace: true });
     } catch (err: any) {
       const errMsg = err?.message || 'Login failed. Please check your credentials.';
-      if (
-        errMsg.toLowerCase().includes('two factor') ||
-        errMsg.toLowerCase().includes('2fa')
-      ) {
+      const lower = errMsg.toLowerCase();
+      if (lower.includes('two factor') || lower.includes('2fa')) {
         setShowTwoFactorInput(true);
         setError('Please enter your 6-digit Authenticator 2FA code to continue.');
+      } else if (lower.includes('user not found') || lower.includes('no account')) {
+        setError('No athlete account found with this email address. Please create an account.');
+      } else if (lower.includes('invalid password')) {
+        setError('Invalid password. Please double-check your password or click "Forgot password?".');
+      } else if (lower.includes('verify your email')) {
+        setError('Your email address is not verified. Please check your email inbox to verify.');
       } else {
         setError(errMsg);
       }
@@ -205,7 +209,7 @@ export const Login: React.FC = () => {
             color: T.primary,
           }}
         >
-          VYOMA
+          KREEDAI
         </div>
 
         {/* Language Selector */}
@@ -342,7 +346,7 @@ export const Login: React.FC = () => {
                 height: '200px',
                 display: 'none',  // hidden on mobile by default
               }}
-              className="vyoma-decor-desktop"
+              className="kreedai-decor-desktop"
             >
               <BauhausDecor />
             </div>
@@ -372,10 +376,48 @@ export const Login: React.FC = () => {
               }}
             />
 
+            {isAuthenticated && user && (
+              <div
+                style={{
+                  background: T.primaryContainer,
+                  border: T.border3,
+                  padding: '0.85rem 1rem',
+                  marginBottom: '1.5rem',
+                  fontFamily: T.fontBody,
+                  fontSize: '0.85rem',
+                  color: T.primary,
+                  fontWeight: 600,
+                  lineHeight: 1.4,
+                }}
+              >
+                You are currently signed in as <strong>{user.name || user.email}</strong>.{' '}
+                <button
+                  type="button"
+                  onClick={() => logout()}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: T.tertiary,
+                    textDecoration: 'underline',
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    padding: 0,
+                    fontFamily: T.fontHeadline,
+                  }}
+                >
+                  Sign Out
+                </button>{' '}
+                to change accounts, or go to{' '}
+                <Link to="/dashboard" style={{ color: T.tertiary, fontWeight: 700 }}>
+                  Dashboard
+                </Link>.
+              </div>
+            )}
+
             <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
               {/* Email */}
               <div>
-                <label htmlFor="vyoma-email" style={labelStyle}>
+                <label htmlFor="kreedai-email" style={labelStyle}>
                   Email Address
                 </label>
                 <div style={{ position: 'relative' }}>
@@ -385,7 +427,7 @@ export const Login: React.FC = () => {
                     style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)' }}
                   />
                   <input
-                    id="vyoma-email"
+                    id="kreedai-email"
                     type="email"
                     placeholder="athlete@example.com"
                     value={email}
@@ -405,7 +447,7 @@ export const Login: React.FC = () => {
               {/* Password */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '0.25rem' }}>
-                  <label htmlFor="vyoma-password" style={{ ...labelStyle, marginBottom: 0 }}>
+                  <label htmlFor="kreedai-password" style={{ ...labelStyle, marginBottom: 0 }}>
                     Password
                   </label>
                   <Link
@@ -427,7 +469,7 @@ export const Login: React.FC = () => {
                 </div>
                 <div style={{ position: 'relative' }}>
                   <input
-                    id="vyoma-password"
+                    id="kreedai-password"
                     type={showPassword ? 'text' : 'password'}
                     placeholder="••••••••"
                     value={password}
@@ -466,7 +508,7 @@ export const Login: React.FC = () => {
               {/* 2FA Code Input (Conditional) */}
               {showTwoFactorInput && (
                 <div>
-                  <label htmlFor="vyoma-2fa" style={{ ...labelStyle, color: T.tertiary }}>
+                  <label htmlFor="kreedai-2fa" style={{ ...labelStyle, color: T.tertiary }}>
                     Two-Factor Authentication Code (2FA)
                   </label>
                   <div style={{ position: 'relative' }}>
@@ -476,7 +518,7 @@ export const Login: React.FC = () => {
                       style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)' }}
                     />
                     <input
-                      id="vyoma-2fa"
+                      id="kreedai-2fa"
                       type="text"
                       inputMode="numeric"
                       placeholder="6-digit Authenticator Code"
@@ -684,7 +726,7 @@ export const Login: React.FC = () => {
           }}
         >
           <span style={{ fontFamily: T.fontBody, fontSize: '0.95rem', marginBottom: '0.25rem' }}>
-            New to VYOMA?
+            New to KreedAI?
           </span>
           <span
             style={{
@@ -728,7 +770,7 @@ export const Login: React.FC = () => {
       {/* ── Responsive style inject ───────────────── */}
       <style>{`
         @media (min-width: 900px) {
-          .vyoma-decor-desktop { display: block !important; }
+          .kreedai-decor-desktop { display: block !important; }
         }
       `}</style>
     </div>

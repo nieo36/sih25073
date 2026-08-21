@@ -1,9 +1,25 @@
 /**
- * IndexedDB Storage Engine for Offline Fitness Assessment Sessions & Passports
+ * IndexedDB Storage Engine for Offline Fitness Assessment Sessions, MediaPipe Kinematics & Passports
  */
 
+export interface LandmarkPoint {
+  x: number;
+  y: number;
+  z: number;
+  visibility?: number;
+}
+
+export interface LandmarkSample {
+  timestampMs: number;
+  repNumber?: number;
+  event?: 'peak_inflection' | 'lowest_depth' | 'start' | 'finish' | 'sample';
+  angle?: number;
+  landmarks: LandmarkPoint[];
+}
+
 export interface StoredAssessment {
-  id: string;
+  id: string; // Client UUID
+  athleteId?: string;
   exerciseType: 'squat' | 'pushup';
   date: string;
   totalScore: number;
@@ -14,7 +30,19 @@ export interface StoredAssessment {
   caloriesBurned: number;
   symmetryScore: number;
   depthScore: number;
+  formAccuracy?: number;
+  cadenceScore?: number;
+  angles?: {
+    current: number;
+    min: number;
+    max: number;
+    avg: number;
+  };
+  landmarkSamples?: LandmarkSample[];
   synced: boolean;
+  syncedAt?: string;
+  remoteId?: string;
+  createdAt?: number;
 }
 
 export interface StoredPassport {
@@ -34,7 +62,7 @@ export interface StoredPassport {
 }
 
 const DB_NAME = 'AthleteAssessmentDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_ASSESSMENTS = 'assessments';
 const STORE_PASSPORT = 'passport';
 
@@ -49,18 +77,34 @@ export class OfflineStorage {
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
+        let assessmentStore: IDBObjectStore;
+        
         if (!db.objectStoreNames.contains(STORE_ASSESSMENTS)) {
-          const store = db.createObjectStore(STORE_ASSESSMENTS, { keyPath: 'id' });
-          store.createIndex('date', 'date', { unique: false });
-          store.createIndex('synced', 'synced', { unique: false });
+          assessmentStore = db.createObjectStore(STORE_ASSESSMENTS, { keyPath: 'id' });
+        } else {
+          assessmentStore = (event.target as any).transaction.objectStore(STORE_ASSESSMENTS);
         }
+
+        if (!assessmentStore.indexNames.contains('date')) {
+          assessmentStore.createIndex('date', 'date', { unique: false });
+        }
+        if (!assessmentStore.indexNames.contains('synced')) {
+          assessmentStore.createIndex('synced', 'synced', { unique: false });
+        }
+        if (!assessmentStore.indexNames.contains('createdAt')) {
+          assessmentStore.createIndex('createdAt', 'createdAt', { unique: false });
+        }
+
         if (!db.objectStoreNames.contains(STORE_PASSPORT)) {
           db.createObjectStore(STORE_PASSPORT, { keyPath: 'athleteId' });
         }
       };
 
       request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      request.onerror = () => {
+        this.dbPromise = null;
+        reject(request.error);
+      };
     });
 
     return this.dbPromise;
@@ -83,7 +127,52 @@ export class OfflineStorage {
       const tx = db.transaction(STORE_ASSESSMENTS, 'readonly');
       const store = tx.objectStore(STORE_ASSESSMENTS);
       const req = store.getAll();
-      req.onsuccess = () => resolve(req.result || []);
+      req.onsuccess = () => {
+        const results = (req.result || []) as StoredAssessment[];
+        // Sort descending by createdAt
+        results.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        resolve(results);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  public static async getUnsyncedAssessments(): Promise<StoredAssessment[]> {
+    const all = await this.getAllAssessments();
+    return all.filter((a) => !a.synced);
+  }
+
+  public static async markAssessmentSynced(id: string, remoteId?: string): Promise<void> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_ASSESSMENTS, 'readwrite');
+      const store = tx.objectStore(STORE_ASSESSMENTS);
+      const req = store.get(id);
+
+      req.onsuccess = () => {
+        const assessment = req.result as StoredAssessment | undefined;
+        if (assessment) {
+          assessment.synced = true;
+          assessment.syncedAt = new Date().toISOString();
+          if (remoteId) assessment.remoteId = remoteId;
+          const updateReq = store.put(assessment);
+          updateReq.onsuccess = () => resolve();
+          updateReq.onerror = () => reject(updateReq.error);
+        } else {
+          resolve();
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  public static async deleteAssessment(id: string): Promise<void> {
+    const db = await this.getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_ASSESSMENTS, 'readwrite');
+      const store = tx.objectStore(STORE_ASSESSMENTS);
+      const req = store.delete(id);
+      req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
   }

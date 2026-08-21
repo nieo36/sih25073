@@ -77,7 +77,7 @@ export const VerifyEmail: React.FC = () => {
                 margin: '0 auto 1.5rem',
               }}
             >
-              <Loader2 size={32} color={T.primary} className="vyoma-spin" />
+              <Loader2 size={32} color={T.primary} className="kreedai-spin" />
             </div>
             <h2
               style={{
@@ -201,12 +201,12 @@ export const VerifyEmail: React.FC = () => {
       </div>
 
       <style>{`
-        @keyframes vyomaSpin {
+        @keyframes kreedaiSpin {
           from { transform: rotate(0deg); }
           to   { transform: rotate(360deg); }
         }
-        .vyoma-spin {
-          animation: vyomaSpin 1s linear infinite;
+        .kreedai-spin {
+          animation: kreedaiSpin 1s linear infinite;
         }
       `}</style>
     </div>

@@ -3,7 +3,48 @@
  * Handles login, register, OAuth, refresh tokens, 2FA, and password recovery.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:2000/api/v1';
+const getApiBaseUrl = (): string => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+    const protocol = window.location.protocol || 'http:';
+    return `${protocol}//${window.location.hostname}:2000/api/v1`;
+  }
+  return 'http://localhost:2000/api/v1';
+};
+
+export interface AthleteProfile {
+  age?: number | string;
+  gender?: string;
+  height?: string;
+  weight?: string;
+  country?: string;
+  state?: string;
+  city?: string;
+  areaType?: 'urban' | 'rural';
+  primarySport?: string;
+  secondarySports?: string;
+  experienceLevel?: string;
+  yearsExperience?: string;
+  athleticGoals?: string;
+  dominantHand?: 'left' | 'right';
+  dominantFoot?: 'left' | 'right';
+  organization?: string;
+  achievements?: string;
+  bio?: string;
+  trainingFrequency?: string;
+  profilePhoto?: string;
+  avatar?: string;
+}
+
+export interface PrivacyPreferences {
+  movementInsights?: boolean;
+  highlightProcessing?: boolean;
+  recruiterDiscoverability?: boolean;
+  profileVisibility?: 'only_me' | 'coaches' | 'verified';
+  guardianConsent?: boolean;
+}
 
 export interface AuthUser {
   id: string;
@@ -12,12 +53,18 @@ export interface AuthUser {
   role: string;
   isEmailVerified: boolean;
   twoFactorEnabled?: boolean;
+  avatar?: string;
+  profilePhoto?: string;
+  profile?: AthleteProfile;
+  privacy?: PrivacyPreferences;
 }
 
 export interface RegisterPayload {
   name: string;
   email: string;
   password: string;
+  profile?: AthleteProfile;
+  privacy?: PrivacyPreferences;
 }
 
 export interface LoginPayload {
@@ -34,12 +81,8 @@ export interface AuthResponse {
 
 export interface RegisterResponse {
   message: string;
-  user: {
-    name: string;
-    email: string;
-    role: string;
-    isEmailVerified: boolean;
-  };
+  accessToken?: string;
+  user: AuthUser;
 }
 
 export interface TwoFactorSetupResponse {
@@ -57,16 +100,19 @@ export interface ApiError {
 }
 
 export class AuthService {
-  public static readonly BASE_URL = API_BASE_URL;
+  public static get BASE_URL(): string {
+    return getApiBaseUrl();
+  }
 
   /**
-   * Helper to execute fetch with JSON headers and cookies
+   * Helper to execute fetch with JSON headers, cookies, and 401 silent token refresh
    */
   private static async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    isRetry = false
   ): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const url = `${getApiBaseUrl()}${endpoint}`;
     const token = localStorage.getItem('auth_token');
 
     const headers: Record<string, string> = {
@@ -75,11 +121,34 @@ export class AuthService {
       ...((options.headers as Record<string, string>) || {}),
     };
 
-    const response = await fetch(url, {
+    let response = await fetch(url, {
       ...options,
       headers,
       credentials: 'include', // Ensures refreshToken cookie is sent & received
     });
+
+    // Silent token refresh interceptor on 401 Unauthorized
+    if (
+      response.status === 401 &&
+      !isRetry &&
+      endpoint !== '/auth/refresh' &&
+      endpoint !== '/auth/login' &&
+      endpoint !== '/auth/register'
+    ) {
+      try {
+        const refreshRes = await AuthService.refreshToken();
+        if (refreshRes && refreshRes.accessToken) {
+          localStorage.setItem('auth_token', refreshRes.accessToken);
+          if (refreshRes.user) {
+            localStorage.setItem('auth_user', JSON.stringify(refreshRes.user));
+          }
+          return await AuthService.request<T>(endpoint, options, true);
+        }
+      } catch {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_user');
+      }
+    }
 
     const data = await response.json().catch(() => ({}));
 
@@ -167,7 +236,7 @@ export class AuthService {
    * Returns Google OAuth entrypoint URL
    */
   public static getGoogleAuthUrl(): string {
-    return `${API_BASE_URL}/auth/google`;
+    return `${getApiBaseUrl()}/auth/google`;
   }
 
   /**
@@ -186,6 +255,16 @@ export class AuthService {
     return this.request<{ message: string; twoFactorAuth: boolean }>('/auth/2fa/verify', {
       method: 'POST',
       body: JSON.stringify({ code }),
+    });
+  }
+
+  /**
+   * Update user profile & privacy preferences
+   */
+  public static async updateProfile(payload: { name?: string; profile?: AthleteProfile; privacy?: PrivacyPreferences }): Promise<{ message: string; user: AuthUser }> {
+    return this.request<{ message: string; user: AuthUser }>('/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
     });
   }
 }
