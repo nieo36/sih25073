@@ -1,0 +1,25 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: DockerFile
+    image: beec/kreedai:v1
+    container_name: kreedAi
+    restart: unless-stopped
+    networks:
+      - kreedaiNet
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports: 
+      - "80:80"
+    depends_on:
+      - app
+    networks:
+      - kreedaiNet
+    volumes: 
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+
+networks:
+  kreedaiNet:

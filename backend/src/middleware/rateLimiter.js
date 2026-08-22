@@ -8,7 +8,7 @@ const rateLimiter = (maxRequest = 5000, time = 15 * 60 * 1000) => {
 		headers: true,
 		standardHeaders: true,
 		legacyHeaders: false,
-		skip: () => process.env.NODE_ENV !== 'production', // Skip in development
+		skip: () => process.env.NODE_ENV !== 'production',
 	});
 };
 

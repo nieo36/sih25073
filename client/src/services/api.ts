@@ -7,12 +7,10 @@ const getApiBaseUrl = (): string => {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-    const protocol = window.location.protocol || 'http:';
-    return `${protocol}//${window.location.hostname}:2000/api/v1`;
-  }
-  return 'http://localhost:2000/api/v1';
+  // When served from backend, use relative URL
+  return '/api/v1';
 };
+
 
 export interface LoginPayload {
   email: string;

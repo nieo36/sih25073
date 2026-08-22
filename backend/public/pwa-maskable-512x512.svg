@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Solid background extending to edge for maskable icon -->
+  <rect width="512" height="512" fill="#ffcc00"/>
+  <!-- Inner Safe Zone Content -->
+  <circle cx="256" cy="256" r="180" fill="#f5f0e8" stroke="#1a1a1a" stroke-width="20"/>
+  <!-- Bold Lightning Bolt / Zap Icon -->
+  <polygon points="280,120 170,270 255,270 232,390 342,240 257,240" fill="#1a1a1a" stroke="#1a1a1a" stroke-width="10" stroke-linejoin="round"/>
+  <polygon points="274,145 190,260 250,260 236,350 320,250 260,250" fill="#e63b2e"/>
+</svg>
