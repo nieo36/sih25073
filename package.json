@@ -7,7 +7,9 @@
     "start": "npm start --prefix backend",
     "client:dev": "npm run dev --prefix client",
     "client:build": "npm run build --prefix client",
-    "client:preview": "npm run preview --prefix client"
+    "client:preview": "npm run preview --prefix client",
+    "install-services": "npm install --prefix backend && npm install --prefix client",
+    "build": "npm run deploy --prefix client"
   },
   "repository": {
     "type": "git",

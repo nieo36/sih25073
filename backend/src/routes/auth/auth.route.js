@@ -22,7 +22,6 @@ auth.get("/verify-email", verifyEmailHandler);
 auth.post("/refresh", refreshTokenHandler);
 auth.post("/logout", logoutHandler);
 auth.post("/forgot-password", forgotPasswordHandler);
-auth.post("/forgot-Password", forgotPasswordHandler);
 auth.post("/reset-password", resetPasswordHandler);
 auth.get("/google", googleAuthStartHandler);
 auth.get("/google/callback", googleAuthCallbackHandler);

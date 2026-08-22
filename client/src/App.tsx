@@ -2,8 +2,13 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
+import { PWAProvider } from './context/PWAContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Navbar } from './components/Navbar';
+import { MobileNav } from './components/navigation/MobileNav';
+import { OfflineIndicator } from './components/pwa/OfflineIndicator';
+import { InstallBanner } from './components/pwa/InstallBanner';
+import { UpdateBanner } from './components/pwa/UpdateBanner';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { AuthCallback } from './pages/AuthCallback';
@@ -21,11 +26,13 @@ export const App: React.FC = () => {
   return (
     <LanguageProvider>
       <AuthProvider>
-        <Router>
-        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-          <Navbar />
-          <main style={{ flex: 1, paddingBottom: '3rem' }}>
-            <Routes>
+        <PWAProvider>
+          <Router>
+            <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+              <OfflineIndicator />
+              <Navbar />
+              <main style={{ flex: 1, position: 'relative' }}>
+                <Routes>
               {/* Default Redirect to Dashboard */}
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
@@ -101,8 +108,12 @@ export const App: React.FC = () => {
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </main>
+          <InstallBanner />
+          <UpdateBanner />
+          <MobileNav />
         </div>
       </Router>
+    </PWAProvider>
     </AuthProvider>
     </LanguageProvider>
   );

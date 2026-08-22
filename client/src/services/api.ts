@@ -7,12 +7,10 @@ const getApiBaseUrl = (): string => {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-    const protocol = window.location.protocol || 'http:';
-    return `${protocol}//${window.location.hostname}:2000/api/v1`;
-  }
-  return 'http://localhost:2000/api/v1';
+  // When served from backend, use relative URL
+  return '/api/v1';
 };
+
 
 export interface LoginPayload {
   email: string;
@@ -100,6 +98,8 @@ export class ApiService {
   }
 
   public static async syncAssessment(assessment: StoredAssessment): Promise<{ success: boolean; id: string; remoteId?: string }> {
+    // NOTE: landmarkSamples are stripped — raw MediaPipe arrays can be 5–50 MB,
+    // they are stored locally in IndexedDB only and not needed server-side.
     return await this.request<{ success: boolean; id: string; remoteId?: string }>('/assessment/sync', {
       method: 'POST',
       body: JSON.stringify({
@@ -117,7 +117,7 @@ export class ApiService {
         formAccuracy: assessment.formAccuracy,
         cadenceScore: assessment.cadenceScore,
         angles: assessment.angles,
-        landmarkSamples: assessment.landmarkSamples,
+        // landmarkSamples intentionally omitted — too large for HTTP sync
         createdAt: assessment.createdAt ? new Date(assessment.createdAt).toISOString() : new Date(assessment.date).toISOString(),
       }),
     });
@@ -142,7 +142,7 @@ export class ApiService {
           formAccuracy: a.formAccuracy,
           cadenceScore: a.cadenceScore,
           angles: a.angles,
-          landmarkSamples: a.landmarkSamples,
+          // landmarkSamples intentionally omitted — too large for HTTP sync
           createdAt: a.createdAt ? new Date(a.createdAt).toISOString() : new Date(a.date).toISOString(),
         })),
       }),

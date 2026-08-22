@@ -61,122 +61,142 @@ export const Navbar: React.FC = () => {
   const userAvatar = user?.profile?.profilePhoto || user?.profilePhoto || user?.avatar;
 
   return (
-    <nav style={{
-      position: 'sticky',
-      top: 0,
-      zIndex: 50,
-      background: T.bg,
-      borderBottom: T.border4,
-      padding: '0.65rem 1.25rem',
-      fontFamily: T.fontBody,
-      boxShadow: '0 2px 0px 0px rgba(26,26,26,0.1)',
-    }}>
-      <div style={{
-        maxWidth: '1380px',
-        margin: '0 auto',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'nowrap',
-        gap: '1rem',
-      }}>
-        {/* Brand Logo */}
-        <Link to="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', textDecoration: 'none', flexShrink: 0 }}>
-          <div style={{
-            background: T.primaryContainer,
-            width: '36px',
-            height: '36px',
-            border: T.border3,
-            boxShadow: T.shadow2,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}>
-            <Zap size={20} color={T.primary} />
-          </div>
-          <div>
-            <div style={{
-              fontSize: '1.25rem',
-              fontWeight: 900,
-              letterSpacing: '-0.04em',
-              fontFamily: T.fontHeadline,
-              textTransform: 'uppercase',
-              color: T.primary,
-              lineHeight: 1,
-            }}>
-              KREED<span style={{ color: T.secondary }}>AI</span>
-            </div>
-            <div style={{
-              fontSize: '0.65rem',
-              color: T.primary,
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              fontFamily: T.fontHeadline,
-              marginTop: '0.1rem',
-            }}>
-              Pose Studio & Analytics
-            </div>
-          </div>
-        </Link>
-
-        {/* Navigation Links */}
+    <>
+      <style>{`
+        @media (max-width: 768px) {
+          .kreedai-desktop-links {
+            display: none !important;
+          }
+          .kreedai-nav-container {
+            padding: 0.5rem 0.75rem !important;
+          }
+          .kreedai-user-name {
+            display: none !important;
+          }
+        }
+      `}</style>
+      <nav
+        className="kreedai-nav-container"
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          background: T.bg,
+          borderBottom: T.border4,
+          padding: '0.65rem 1.25rem',
+          fontFamily: T.fontBody,
+          boxShadow: '0 2px 0px 0px rgba(26,26,26,0.1)',
+        }}
+      >
         <div style={{
+          maxWidth: '1380px',
+          margin: '0 auto',
           display: 'flex',
           alignItems: 'center',
-          gap: '0.35rem',
-          overflowX: 'auto',
-          scrollbarWidth: 'none',
-          padding: '0.2rem 0',
-          flex: '1 1 auto',
-          justifyContent: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'nowrap',
+          gap: '0.75rem',
         }}>
-          {navLinks.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              location.pathname === item.to ||
-              (item.to === '/sports-passport' && location.pathname === '/passport');
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  padding: '0.45rem 0.75rem',
-                  fontSize: '0.82rem',
-                  fontWeight: 700,
-                  fontFamily: T.fontHeadline,
-                  textTransform: 'uppercase',
-                  textDecoration: 'none',
-                  color: T.primary,
-                  background: isActive ? T.primaryContainer : 'transparent',
-                  border: isActive ? T.border2 : '2px solid transparent',
-                  boxShadow: isActive ? T.shadow2 : 'none',
-                  transition: 'all 0.15s ease',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = T.surfaceVariant;
-                    e.currentTarget.style.borderColor = T.primary;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.background = 'transparent';
-                    e.currentTarget.style.borderColor = 'transparent';
-                  }
-                }}
-              >
-                <Icon size={15} color={T.primary} />
-                {item.label}
-              </Link>
-            );
-          })}
-        </div>
+          {/* Brand Logo */}
+          <Link to="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', textDecoration: 'none', flexShrink: 0 }}>
+            <div style={{
+              background: T.primaryContainer,
+              width: '36px',
+              height: '36px',
+              border: T.border3,
+              boxShadow: T.shadow2,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <Zap size={20} color={T.primary} />
+            </div>
+            <div>
+              <div style={{
+                fontSize: '1.25rem',
+                fontWeight: 900,
+                letterSpacing: '-0.04em',
+                fontFamily: T.fontHeadline,
+                textTransform: 'uppercase',
+                color: T.primary,
+                lineHeight: 1,
+              }}>
+                KREED<span style={{ color: T.secondary }}>AI</span>
+              </div>
+              <div style={{
+                fontSize: '0.65rem',
+                color: T.primary,
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                fontFamily: T.fontHeadline,
+                marginTop: '0.1rem',
+              }}>
+                Pose Studio & Analytics
+              </div>
+            </div>
+          </Link>
+
+          {/* Desktop Navigation Links */}
+          <div
+            className="kreedai-desktop-links"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              overflowX: 'auto',
+              scrollbarWidth: 'none',
+              padding: '0.2rem 0',
+              flex: '1 1 auto',
+              justifyContent: 'center',
+            }}
+          >
+            {navLinks.map((item) => {
+              const Icon = item.icon;
+              const isActive =
+                location.pathname === item.to ||
+                (item.to === '/sports-passport' && location.pathname === '/passport');
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.45rem 0.75rem',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    fontFamily: T.fontHeadline,
+                    textTransform: 'uppercase',
+                    textDecoration: 'none',
+                    color: T.primary,
+                    background: isActive ? T.primaryContainer : 'transparent',
+                    border: isActive ? T.border2 : '2px solid transparent',
+                    boxShadow: isActive ? T.shadow2 : 'none',
+                    transition: 'all 0.15s ease',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = T.surfaceVariant;
+                      e.currentTarget.style.borderColor = T.primary;
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.borderColor = 'transparent';
+                    }
+                  }}
+                >
+                  <Icon size={15} color={T.primary} />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
 
         {/* User Account / Auth Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexShrink: 0 }}>
@@ -229,7 +249,7 @@ export const Navbar: React.FC = () => {
                     {user.name ? user.name.charAt(0).toUpperCase() : <User size={13} />}
                   </div>
                 )}
-                <span>{user.name || user.email.split('@')[0]}</span>
+                <span className="kreedai-user-name">{user.name || user.email.split('@')[0]}</span>
                 {user.twoFactorEnabled && (
                   <span title="2FA Active" style={{ display: 'inline-flex', alignItems: 'center' }}>
                     <ShieldCheck size={14} color={T.tertiary} />
@@ -312,5 +332,8 @@ export const Navbar: React.FC = () => {
         </div>
       </div>
     </nav>
+    </>
   );
 };
+
+export default Navbar;
