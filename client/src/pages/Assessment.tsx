@@ -1,32 +1,58 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { createPoseDetector, drawPoseSkeleton, Results, Pose } from '../mediapipe/pose';
+
+// Existing analyzers
 import { SquatAnalyzer } from '../mediapipe/squat';
 import { PushupAnalyzer } from '../mediapipe/pushup';
 import { CurlAnalyzer } from '../mediapipe/curl';
-import { EXERCISE_CONFIGS, ExerciseType } from '../config/exercises';
+
+// 🏀 Basketball Analyzers
+import { VerticalJumpAnalyzer } from '../mediapipe/basketball_verticalJump';
+import { AgilityAnalyzer } from '../mediapipe/basketball_agility';
+import { SprintAnalyzer } from '../mediapipe/basketball_sprint';
+import { ShootingFormAnalyzer } from '../mediapipe/basketball_shootingForm';
+import { DefensiveStanceAnalyzer } from '../mediapipe/basketball_defensiveStance';
+import { LateralMovementAnalyzer } from '../mediapipe/basketball_lateralMovement';
+
+// 🥊 Boxing Analyzers
+import { PunchSpeedAnalyzer } from '../mediapipe/boxing_punchSpeed';
+import { ReactionTimeAnalyzer } from '../mediapipe/boxing_reactionTime';
+import { BoxingStanceAnalyzer } from '../mediapipe/boxing_stance';
+import { GuardPositionAnalyzer } from '../mediapipe/boxing_guardPosition';
+import { FootworkAnalyzer } from '../mediapipe/boxing_footwork';
+import { HipRotationAnalyzer } from '../mediapipe/boxing_hipRotation';
+
+// 🏋️ Weightlifting Analyzers
+import { WeightliftingSquatDepthAnalyzer } from '../mediapipe/weightlifting_squatDepth';
+import { BarPathAnalyzer } from '../mediapipe/weightlifting_barPath';
+import { JointAnglesAnalyzer } from '../mediapipe/weightlifting_jointAngles';
+import { WeightliftingStabilityAnalyzer } from '../mediapipe/weightlifting_stability';
+import { TempoAnalyzer } from '../mediapipe/weightlifting_tempo';
+import { LiftingTechniqueAnalyzer } from '../mediapipe/weightlifting_liftingTechnique';
+
+// Audio
+import { playBeep } from '../mediapipe/beep';
+
+// Config & Analytics
+import { EXERCISE_CONFIGS, ExerciseType, SportCategory, SPORTS_LIST, getExercisesBySport } from '../config/exercises';
 import { computeOverallAssessmentScore, AssessmentScore } from '../analytics/scoring';
 import { OfflineStorage, LandmarkSample } from '../storage/indexedDB';
 import { syncManager, SyncStatus } from '../services/syncManager';
 import {
-  Activity,
   AlertTriangle,
   BarChart2,
   Camera as CameraIcon,
   CameraOff,
-  CheckCircle2,
   Cloud,
   CloudOff,
-  Dumbbell,
   Info,
   Loader2,
   Play,
   RotateCcw,
-  Sparkles,
   Square,
   SwitchCamera,
-  Target,
-  User,
+  Zap,
 } from 'lucide-react';
 
 const T = {
@@ -62,8 +88,10 @@ interface RepLogEntry {
 }
 
 export const Assessment: React.FC = () => {
-  // Exercise Selection & State
-  const [exercise, setExercise] = useState<ExerciseType>('curl');
+  // Sport & Exercise Selection State
+  const [selectedSport, setSelectedSport] = useState<SportCategory>('Basketball');
+  const [exercise, setExercise] = useState<ExerciseType>('basketball_vertical_jump');
+
   const [isAssessing, setIsAssessing] = useState<boolean>(false);
   const [duration, setDuration] = useState<number>(0);
   const [liveFeedback, setLiveFeedback] = useState<string>('Select exercise and start camera to calibrate.');
@@ -81,9 +109,14 @@ export const Assessment: React.FC = () => {
 
   // Mobile Camera & Pipeline State
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  const facingModeRef = useRef<'user' | 'environment'>(facingMode);
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
   const [isCameraLoading, setIsCameraLoading] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+
+  useEffect(() => {
+    facingModeRef.current = facingMode;
+  }, [facingMode]);
 
   // Session Result & Sync State
   const [score, setScore] = useState<AssessmentScore>({
@@ -109,9 +142,34 @@ export const Assessment: React.FC = () => {
   const landmarkSamplesRef = useRef<LandmarkSample[]>([]);
 
   // Biomechanical Analyzers
+  // General
   const squatAnalyzerRef = useRef<SquatAnalyzer>(new SquatAnalyzer());
   const pushupAnalyzerRef = useRef<PushupAnalyzer>(new PushupAnalyzer());
   const curlAnalyzerRef = useRef<CurlAnalyzer>(new CurlAnalyzer());
+
+  // 🏀 Basketball
+  const verticalJumpAnalyzerRef = useRef<VerticalJumpAnalyzer>(new VerticalJumpAnalyzer());
+  const agilityAnalyzerRef = useRef<AgilityAnalyzer>(new AgilityAnalyzer());
+  const sprintAnalyzerRef = useRef<SprintAnalyzer>(new SprintAnalyzer());
+  const shootingFormAnalyzerRef = useRef<ShootingFormAnalyzer>(new ShootingFormAnalyzer());
+  const defensiveStanceAnalyzerRef = useRef<DefensiveStanceAnalyzer>(new DefensiveStanceAnalyzer());
+  const lateralMovementAnalyzerRef = useRef<LateralMovementAnalyzer>(new LateralMovementAnalyzer());
+
+  // 🥊 Boxing
+  const punchSpeedAnalyzerRef = useRef<PunchSpeedAnalyzer>(new PunchSpeedAnalyzer());
+  const reactionTimeAnalyzerRef = useRef<ReactionTimeAnalyzer>(new ReactionTimeAnalyzer());
+  const boxingStanceAnalyzerRef = useRef<BoxingStanceAnalyzer>(new BoxingStanceAnalyzer());
+  const guardPositionAnalyzerRef = useRef<GuardPositionAnalyzer>(new GuardPositionAnalyzer());
+  const footworkAnalyzerRef = useRef<FootworkAnalyzer>(new FootworkAnalyzer());
+  const hipRotationAnalyzerRef = useRef<HipRotationAnalyzer>(new HipRotationAnalyzer());
+
+  // 🏋️ Weightlifting
+  const weightliftingSquatDepthAnalyzerRef = useRef<WeightliftingSquatDepthAnalyzer>(new WeightliftingSquatDepthAnalyzer());
+  const barPathAnalyzerRef = useRef<BarPathAnalyzer>(new BarPathAnalyzer());
+  const jointAnglesAnalyzerRef = useRef<JointAnglesAnalyzer>(new JointAnglesAnalyzer());
+  const weightliftingStabilityAnalyzerRef = useRef<WeightliftingStabilityAnalyzer>(new WeightliftingStabilityAnalyzer());
+  const tempoAnalyzerRef = useRef<TempoAnalyzer>(new TempoAnalyzer());
+  const liftingTechniqueAnalyzerRef = useRef<LiftingTechniqueAnalyzer>(new LiftingTechniqueAnalyzer());
 
   // Real-time State Mirror Refs
   const isAssessingRef = useRef<boolean>(isAssessing);
@@ -121,7 +179,11 @@ export const Assessment: React.FC = () => {
   const lastFpsTimeRef = useRef<number>(performance.now());
   const lastSampleTimeRef = useRef<number>(0);
 
-  const currentConfig = EXERCISE_CONFIGS[exercise];
+  const currentConfig = EXERCISE_CONFIGS[exercise] || EXERCISE_CONFIGS['basketball_vertical_jump'];
+
+  // Ref to track last feedback message so we only beep when it changes
+  const lastFeedbackRef = useRef<string>('');
+  const lastRepCountRef = useRef<number>(0);
 
   useEffect(() => {
     isAssessingRef.current = isAssessing;
@@ -153,6 +215,32 @@ export const Assessment: React.FC = () => {
     };
   }, [isAssessing]);
 
+  const resetAllAnalyzers = useCallback(() => {
+    squatAnalyzerRef.current.reset();
+    pushupAnalyzerRef.current.reset();
+    curlAnalyzerRef.current.reset();
+    verticalJumpAnalyzerRef.current.reset();
+    agilityAnalyzerRef.current.reset();
+    sprintAnalyzerRef.current.reset();
+    shootingFormAnalyzerRef.current.reset();
+    defensiveStanceAnalyzerRef.current.reset();
+    lateralMovementAnalyzerRef.current.reset();
+    punchSpeedAnalyzerRef.current.reset();
+    reactionTimeAnalyzerRef.current.reset();
+    boxingStanceAnalyzerRef.current.reset();
+    guardPositionAnalyzerRef.current.reset();
+    footworkAnalyzerRef.current.reset();
+    hipRotationAnalyzerRef.current.reset();
+    weightliftingSquatDepthAnalyzerRef.current.reset();
+    barPathAnalyzerRef.current.reset();
+    jointAnglesAnalyzerRef.current.reset();
+    weightliftingStabilityAnalyzerRef.current.reset();
+    tempoAnalyzerRef.current.reset();
+    liftingTechniqueAnalyzerRef.current.reset();
+    lastFeedbackRef.current = '';
+    lastRepCountRef.current = 0;
+  }, []);
+
   /**
    * MediaPipe Pose Result Handler - Process Frame & Evaluate Kinematics
    */
@@ -171,9 +259,24 @@ export const Assessment: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Dynamically match canvas pixel resolution with video's true stream resolution
+    const video = videoRef.current;
+    const videoWidth = (video && video.videoWidth > 0) ? video.videoWidth : 1280;
+    const videoHeight = (video && video.videoHeight > 0) ? video.videoHeight : 720;
+    if (canvas.width !== videoWidth || canvas.height !== videoHeight) {
+      canvas.width = videoWidth;
+      canvas.height = videoHeight;
+    }
+
     // 2. Clear canvas overlay
     ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Mirror user front camera properly
+    if (facingModeRef.current === 'user') {
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+    }
 
     // 3. Draw video background frame
     if (results.image) {
@@ -190,66 +293,237 @@ export const Assessment: React.FC = () => {
         minConfidence: 0.45,
       });
 
-      // 5. If assessment active, feed landmarks into exercise analyzer
+      // 5. If assessment active, feed landmarks into the selected sport analyzer
       if (isAssessingRef.current) {
         let currentJointAngle = 0;
         let isInflection = false;
         let feedback: any = null;
+        let repNumber = 0;
+        let isGood = false;
+        let avgForm = 85;
 
-        if (exerciseRef.current === 'curl') {
-          feedback = curlAnalyzerRef.current.process(results.poseLandmarks);
-        } else if (exerciseRef.current === 'squat') {
-          feedback = squatAnalyzerRef.current.process(results.poseLandmarks);
-        } else {
-          feedback = pushupAnalyzerRef.current.process(results.poseLandmarks);
+        const currentEx = exerciseRef.current;
+        const lms = results.poseLandmarks;
+
+        switch (currentEx) {
+          // 🏀 Basketball
+          case 'basketball_vertical_jump':
+            feedback = verticalJumpAnalyzerRef.current.process(lms);
+            repNumber = feedback.repCount ?? 0;
+            isGood = !!feedback.isGoodRep;
+            currentJointAngle = feedback.kneeAngle ?? 0;
+            avgForm = verticalJumpAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 80;
+            break;
+          case 'basketball_agility':
+            feedback = agilityAnalyzerRef.current.process(lms);
+            repNumber = feedback.directionChanges ?? 0;
+            isGood = !!feedback.isGoodMovement;
+            currentJointAngle = feedback.kneeAngle ?? 0;
+            avgForm = agilityAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 80;
+            break;
+          case 'basketball_sprint':
+            feedback = sprintAnalyzerRef.current.process(lms);
+            repNumber = feedback.strideCount ?? 0;
+            isGood = !!feedback.isGoodStride;
+            currentJointAngle = feedback.leftKneeAngle ?? feedback.rightKneeAngle ?? 0;
+            avgForm = sprintAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 85;
+            break;
+          case 'basketball_shooting_form':
+            feedback = shootingFormAnalyzerRef.current.process(lms);
+            repNumber = feedback.shotCount ?? 0;
+            isGood = !!feedback.isGoodShot;
+            currentJointAngle = feedback.shootingElbowAngle ?? 0;
+            avgForm = shootingFormAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 80;
+            break;
+          case 'basketball_defensive_stance':
+            feedback = defensiveStanceAnalyzerRef.current.process(lms);
+            repNumber = Math.round((defensiveStanceAnalyzerRef.current.getGoodStancePercent() / 10));
+            isGood = !!feedback.isGoodStance;
+            currentJointAngle = feedback.kneeAngle ?? 0;
+            avgForm = defensiveStanceAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 82;
+            break;
+          case 'basketball_lateral_movement':
+            feedback = lateralMovementAnalyzerRef.current.process(lms);
+            repNumber = feedback.slideCount ?? 0;
+            isGood = !!feedback.isGoodMovement;
+            currentJointAngle = feedback.kneeAngle ?? 0;
+            avgForm = lateralMovementAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 82;
+            break;
+
+          // 🥊 Boxing
+          case 'boxing_punch_speed':
+            feedback = punchSpeedAnalyzerRef.current.process(lms);
+            repNumber = feedback.punchCount ?? 0;
+            isGood = !!feedback.isGoodPunch;
+            currentJointAngle = feedback.extensionAngle ?? 0;
+            avgForm = punchSpeedAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 80;
+            break;
+          case 'boxing_reaction_time':
+            feedback = reactionTimeAnalyzerRef.current.process(lms);
+            repNumber = feedback.reactionCount ?? 0;
+            isGood = !!feedback.isGoodReaction;
+            currentJointAngle = feedback.avgReactionMs ?? 0;
+            avgForm = reactionTimeAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 75;
+            break;
+          case 'boxing_stance':
+            feedback = boxingStanceAnalyzerRef.current.process(lms);
+            repNumber = feedback.isGoodStance ? 1 : 0;
+            isGood = !!feedback.isGoodStance;
+            currentJointAngle = feedback.kneeAngle ?? 0;
+            avgForm = boxingStanceAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 80;
+            break;
+          case 'boxing_guard_position':
+            feedback = guardPositionAnalyzerRef.current.process(lms);
+            repNumber = Math.round(guardPositionAnalyzerRef.current.getGuardQualityPercent() / 10);
+            isGood = !!feedback.isGoodGuard;
+            currentJointAngle = feedback.overallGuardScore ?? 0;
+            avgForm = guardPositionAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 85;
+            break;
+          case 'boxing_footwork':
+            feedback = footworkAnalyzerRef.current.process(lms);
+            repNumber = feedback.stepCount ?? 0;
+            isGood = !!feedback.isGoodFootwork;
+            currentJointAngle = feedback.activeFootScore ?? 0;
+            avgForm = footworkAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 80;
+            break;
+          case 'boxing_hip_rotation':
+            feedback = hipRotationAnalyzerRef.current.process(lms);
+            repNumber = feedback.rotationCount ?? 0;
+            isGood = !!feedback.isGoodRotation;
+            currentJointAngle = feedback.hipRotationAngle ?? 0;
+            avgForm = hipRotationAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 80;
+            break;
+
+          // 🏋️ Weightlifting
+          case 'weightlifting_squat_depth':
+            feedback = weightliftingSquatDepthAnalyzerRef.current.process(lms);
+            repNumber = feedback.repCount ?? 0;
+            isGood = !!feedback.isGoodRep;
+            currentJointAngle = feedback.leftKneeAngle ?? feedback.rightKneeAngle ?? 0;
+            avgForm = weightliftingSquatDepthAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 85;
+            break;
+          case 'weightlifting_bar_path':
+            feedback = barPathAnalyzerRef.current.process(lms);
+            repNumber = feedback.repCount ?? 0;
+            isGood = !!feedback.isGoodPath;
+            currentJointAngle = feedback.horizontalDeviation ? Math.round(feedback.horizontalDeviation * 1000) : 0;
+            avgForm = barPathAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 82;
+            break;
+          case 'weightlifting_joint_angles':
+            feedback = jointAnglesAnalyzerRef.current.process(lms);
+            repNumber = 0;
+            isGood = !feedback.criticalWarning;
+            currentJointAngle = feedback.joints?.leftKnee ?? 0;
+            avgForm = jointAnglesAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 85;
+            break;
+          case 'weightlifting_stability':
+            feedback = weightliftingStabilityAnalyzerRef.current.process(lms);
+            repNumber = feedback.isStable ? 1 : 0;
+            isGood = !!feedback.isStable;
+            currentJointAngle = feedback.shoulderHipParallelism ?? 0;
+            avgForm = weightliftingStabilityAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 85;
+            break;
+          case 'weightlifting_tempo':
+            feedback = tempoAnalyzerRef.current.process(lms);
+            repNumber = feedback.repCount ?? 0;
+            isGood = !!feedback.isGoodTempo;
+            currentJointAngle = feedback.tempoRatio ? Math.round(feedback.tempoRatio * 10) : 20;
+            avgForm = tempoAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 80;
+            break;
+          case 'weightlifting_lifting_technique':
+            feedback = liftingTechniqueAnalyzerRef.current.process(lms);
+            repNumber = feedback.repCount ?? 0;
+            isGood = !!feedback.isGoodRep;
+            currentJointAngle = feedback.techniqueScore ?? 0;
+            avgForm = liftingTechniqueAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 85;
+            break;
+
+          // Legacy / General
+          case 'curl':
+            feedback = curlAnalyzerRef.current.process(lms);
+            repNumber = feedback.repCount ?? 0;
+            isGood = !!feedback.isGoodRep;
+            currentJointAngle = feedback.elbowAngle ?? 0;
+            avgForm = curlAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 85;
+            break;
+          case 'squat':
+            feedback = squatAnalyzerRef.current.process(lms);
+            repNumber = feedback.repCount ?? 0;
+            isGood = !!feedback.isGoodRep;
+            currentJointAngle = feedback.kneeAngle ?? 0;
+            avgForm = squatAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 88;
+            break;
+          case 'pushup':
+          default:
+            feedback = pushupAnalyzerRef.current.process(lms);
+            repNumber = feedback.repCount ?? 0;
+            isGood = !!feedback.isGoodRep;
+            currentJointAngle = feedback.elbowAngle ?? 0;
+            avgForm = pushupAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 85;
+            break;
         }
 
         if (!feedback.detected) {
-          setLiveFeedback(feedback.feedbackMessage || 'No athlete detected in camera frame. Adjust positioning.');
+          const msg = feedback.feedbackMessage || 'No athlete detected in camera frame. Adjust positioning.';
+          setLiveFeedback(msg);
           setCurrentAngle(0);
           setRomPercent(0);
           setStabilityScore(0);
           setTempoScore(0);
           setConsistencyScore(0);
         } else {
-          if (feedback.repCount > repCount) {
-            setRepCount(feedback.repCount);
+          // ── Beep sound on new feedback instruction ────────────────────────
+          const newMsg = feedback.feedbackMessage || '';
+          if (newMsg && newMsg !== lastFeedbackRef.current) {
+            lastFeedbackRef.current = newMsg;
+            if (isGood || feedback.isGoodDepth || feedback.isGoodAlignment || feedback.isGoodShot || feedback.isGoodPunch) {
+              playBeep('success');
+            } else if (feedback.warnings && feedback.warnings.length > 0) {
+              playBeep('warning');
+            } else {
+              playBeep('info');
+            }
+          }
+
+          // ── Rep Count & Log Tracking ─────────────────────────────────────
+          if (repNumber > lastRepCountRef.current) {
+            lastRepCountRef.current = repNumber;
+            setRepCount(repNumber);
             setRepLogs((prev) => [
               ...prev,
               {
-                repNumber: feedback.repCount,
-                status: feedback.isGoodRep ? 'Excellent' : 'Form Warning',
+                repNumber: repNumber,
+                status: isGood ? 'Excellent' : 'Form Warning',
               },
             ]);
           }
 
-          const angleVal = feedback.elbowAngle ?? feedback.kneeAngle ?? 0;
-          setCurrentAngle(angleVal);
-          setLiveFeedback(feedback.feedbackMessage);
-          setRomPercent(feedback.romPercent);
-          setStabilityScore(feedback.stabilityScore);
-          setTempoScore(feedback.tempoScore);
-          setConsistencyScore(feedback.consistencyScore);
+          // Normalize scores for universal HUD display
+          const romVal = feedback.romPercent ?? feedback.loadDepthPercent ?? feedback.depthScore ?? feedback.extensionAngle ?? 85;
+          const stabVal = feedback.stabilityScore ?? feedback.symmetryScore ?? feedback.guardRestorationScore ?? feedback.balanceScore ?? feedback.shoulderHipParallelism ?? 85;
+          const tempoVal = feedback.tempoScore ?? feedback.cadenceScore ?? feedback.speedScore ?? feedback.overallTempoScore ?? 80;
+          const consVal = feedback.consistencyScore ?? feedback.pathConsistencyScore ?? feedback.formScore ?? 85;
+
+          setCurrentAngle(currentJointAngle);
+          setLiveFeedback(newMsg);
+          setRomPercent(Math.min(100, Math.max(0, Math.round(romVal))));
+          setStabilityScore(Math.min(100, Math.max(0, Math.round(stabVal))));
+          setTempoScore(Math.min(100, Math.max(0, Math.round(tempoVal))));
+          setConsistencyScore(Math.min(100, Math.max(0, Math.round(consVal))));
 
           if (feedback.warnings && feedback.warnings.length > 0) {
             setActiveWarnings((prev) => Array.from(new Set([...prev, ...feedback.warnings])));
           }
 
-          currentJointAngle = angleVal;
-          isInflection = feedback.isGoodRep || feedback.isGoodDepth || feedback.isGoodAlignment;
-
-          let avgForm = 85;
-          if (exerciseRef.current === 'curl') avgForm = curlAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 85;
-          else if (exerciseRef.current === 'squat') avgForm = squatAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 88;
-          else avgForm = pushupAnalyzerRef.current.getAverageFormScore() || feedback.formScore || 85;
+          isInflection = isGood;
 
           const computed = computeOverallAssessmentScore({
-            repsCompleted: feedback.repCount,
-            validReps: feedback.repCount,
+            repsCompleted: repNumber,
+            validReps: repNumber,
             avgFormAccuracy: avgForm,
-            avgDepthScore: feedback.romPercent,
-            cadenceConsistency: feedback.tempoScore,
-            avgSymmetry: feedback.stabilityScore,
+            avgDepthScore: romVal,
+            cadenceConsistency: tempoVal,
+            avgSymmetry: stabVal,
           });
           setScore(computed);
         }
@@ -326,50 +600,36 @@ export const Assessment: React.FC = () => {
       }
 
       if (!stream) {
-        throw new Error(
-          lastErr?.name === 'NotAllowedError'
-            ? 'Camera permission denied.'
-            : 'Could not acquire camera stream.'
-        );
+        throw lastErr || new Error('Could not access camera device.');
       }
 
       streamRef.current = stream;
-      const video = videoRef.current;
-      if (!video) throw new Error('Video reference not ready');
 
-      video.srcObject = stream;
-      video.setAttribute('playsinline', 'true');
-      video.setAttribute('autoplay', 'true');
-      video.setAttribute('muted', 'true');
-      await video.play();
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
 
       setIsCameraActive(true);
-      setLiveFeedback(`Camera active. Ready for ${currentConfig.name} assessment.`);
-
-      const sendFrame = async () => {
-        if (videoRef.current && poseRef.current && videoRef.current.readyState >= 2) {
-          try {
-            await poseRef.current.send({ image: videoRef.current });
-          } catch {}
-        }
-        animationFrameIdRef.current = requestAnimationFrame(sendFrame);
-      };
-
-      if (animationFrameIdRef.current) cancelAnimationFrame(animationFrameIdRef.current);
-      animationFrameIdRef.current = requestAnimationFrame(sendFrame);
-    } catch (err: any) {
-      console.error('Camera initialization error:', err);
-      setCameraError(err.message || 'Could not access camera.');
-      setIsCameraActive(false);
-    } finally {
       setIsCameraLoading(false);
+
+      // Start landmark detection render loop
+      const processFrame = async () => {
+        if (videoRef.current && poseRef.current && videoRef.current.readyState >= 2) {
+          await poseRef.current.send({ image: videoRef.current });
+        }
+        animationFrameIdRef.current = requestAnimationFrame(processFrame);
+      };
+      animationFrameIdRef.current = requestAnimationFrame(processFrame);
+    } catch (err: any) {
+      console.error('Camera startup error:', err);
+      setIsCameraLoading(false);
+      setIsCameraActive(false);
+      setCameraError(err.message || 'Failed to start camera');
     }
   };
 
-  /**
-   * Stop Webcam Stream
-   */
-  const handleStopCamera = async () => {
+  const handleStopCamera = () => {
     if (animationFrameIdRef.current) {
       cancelAnimationFrame(animationFrameIdRef.current);
       animationFrameIdRef.current = null;
@@ -412,9 +672,7 @@ export const Assessment: React.FC = () => {
   }, []);
 
   const handleStartAssessment = () => {
-    squatAnalyzerRef.current.reset();
-    pushupAnalyzerRef.current.reset();
-    curlAnalyzerRef.current.reset();
+    resetAllAnalyzers();
     landmarkSamplesRef.current = [];
     setRepCount(0);
     setDuration(0);
@@ -423,31 +681,56 @@ export const Assessment: React.FC = () => {
     setRepLogs([]);
     setActiveWarnings([]);
     setIsAssessing(true);
-    setLiveFeedback(`Assessment started! Perform controlled ${currentConfig.name} repetitions.`);
+    setLiveFeedback(`Assessment started! Perform ${currentConfig.name} drill.`);
+    playBeep('info');
   };
 
   const handleStopAssessment = async () => {
     setIsAssessing(false);
     setCompleted(true);
+    playBeep('success');
 
     const validReps = repCount;
     let avgFormScore = 85;
 
-    if (exercise === 'curl') avgFormScore = curlAnalyzerRef.current.getAverageFormScore() || (repCount > 0 ? 86 : 0);
-    else if (exercise === 'squat') avgFormScore = squatAnalyzerRef.current.getAverageFormScore() || (repCount > 0 ? 88 : 0);
-    else avgFormScore = pushupAnalyzerRef.current.getAverageFormScore() || (repCount > 0 ? 85 : 0);
+    const currentEx = exerciseRef.current;
+    switch (currentEx) {
+      case 'basketball_vertical_jump': avgFormScore = verticalJumpAnalyzerRef.current.getAverageFormScore() || 85; break;
+      case 'basketball_agility': avgFormScore = agilityAnalyzerRef.current.getAverageFormScore() || 85; break;
+      case 'basketball_sprint': avgFormScore = sprintAnalyzerRef.current.getAverageFormScore() || 85; break;
+      case 'basketball_shooting_form': avgFormScore = shootingFormAnalyzerRef.current.getAverageFormScore() || 80; break;
+      case 'basketball_defensive_stance': avgFormScore = defensiveStanceAnalyzerRef.current.getAverageFormScore() || 85; break;
+      case 'basketball_lateral_movement': avgFormScore = lateralMovementAnalyzerRef.current.getAverageFormScore() || 82; break;
+      case 'boxing_punch_speed': avgFormScore = punchSpeedAnalyzerRef.current.getAverageFormScore() || 82; break;
+      case 'boxing_reaction_time': avgFormScore = reactionTimeAnalyzerRef.current.getAverageFormScore() || 80; break;
+      case 'boxing_stance': avgFormScore = boxingStanceAnalyzerRef.current.getAverageFormScore() || 82; break;
+      case 'boxing_guard_position': avgFormScore = guardPositionAnalyzerRef.current.getAverageFormScore() || 85; break;
+      case 'boxing_footwork': avgFormScore = footworkAnalyzerRef.current.getAverageFormScore() || 80; break;
+      case 'boxing_hip_rotation': avgFormScore = hipRotationAnalyzerRef.current.getAverageFormScore() || 82; break;
+      case 'weightlifting_squat_depth': avgFormScore = weightliftingSquatDepthAnalyzerRef.current.getAverageFormScore() || 88; break;
+      case 'weightlifting_bar_path': avgFormScore = barPathAnalyzerRef.current.getAverageFormScore() || 84; break;
+      case 'weightlifting_joint_angles': avgFormScore = jointAnglesAnalyzerRef.current.getAverageFormScore() || 86; break;
+      case 'weightlifting_stability': avgFormScore = weightliftingStabilityAnalyzerRef.current.getAverageFormScore() || 85; break;
+      case 'weightlifting_tempo': avgFormScore = tempoAnalyzerRef.current.getAverageFormScore() || 82; break;
+      case 'weightlifting_lifting_technique': avgFormScore = liftingTechniqueAnalyzerRef.current.getAverageFormScore() || 85; break;
+      case 'curl': avgFormScore = curlAnalyzerRef.current.getAverageFormScore() || 85; break;
+      case 'squat': avgFormScore = squatAnalyzerRef.current.getAverageFormScore() || 88; break;
+      case 'pushup':
+      default:
+        avgFormScore = pushupAnalyzerRef.current.getAverageFormScore() || 85; break;
+    }
 
     const computedScore = computeOverallAssessmentScore({
       repsCompleted: repCount,
       validReps,
       avgFormAccuracy: avgFormScore,
-      avgDepthScore: romPercent,
-      cadenceConsistency: tempoScore,
-      avgSymmetry: stabilityScore,
+      avgDepthScore: romPercent || 85,
+      cadenceConsistency: tempoScore || 80,
+      avgSymmetry: stabilityScore || 85,
     });
 
     setScore(computedScore);
-    setLiveFeedback(`Assessment finished! Completed ${repCount} reps with Score: ${computedScore.totalScore}/100.`);
+    setLiveFeedback(`Assessment finished! Completed ${repCount} reps/actions with Score: ${computedScore.totalScore}/100.`);
 
     // Persist session to IndexedDB & sync to cloud
     try {
@@ -483,33 +766,25 @@ export const Assessment: React.FC = () => {
     }
   };
 
-  const handleSimulateRep = (isGood: boolean) => {
-    const nextRep = repCount + 1;
-    setRepCount(nextRep);
-    setRepLogs((prev) => [
-      ...prev,
-      { repNumber: nextRep, status: isGood ? 'Good' : 'Form Warning' },
-    ]);
-    if (!isGood) {
-      setActiveWarnings((prev) => Array.from(new Set([...prev, currentConfig.warnings[0]])));
+  const handleSelectSport = (sport: SportCategory) => {
+    if (isAssessing) return;
+    setSelectedSport(sport);
+    const exercisesForSport = getExercisesBySport(sport);
+    if (exercisesForSport.length > 0) {
+      setExercise(exercisesForSport[0].id);
+      setCompleted(false);
+      resetAllAnalyzers();
     }
-    const computed = computeOverallAssessmentScore({
-      repsCompleted: nextRep,
-      validReps: isGood ? nextRep : Math.max(0, nextRep - 1),
-      avgFormAccuracy: isGood ? 92 : 75,
-      avgDepthScore: isGood ? 94 : 70,
-      cadenceConsistency: 88,
-      avgSymmetry: isGood ? 90 : 70,
-    });
-    setScore(computed);
-    setLiveFeedback(isGood ? `Good rep completed on ${currentConfig.name}` : `Movement Warning detected during rep.`);
   };
 
-  // Active recommendations list based on exercise and warnings
-  const currentSuggestions = currentConfig.warnings
-    .filter((w) => activeWarnings.includes(w) || activeWarnings.length === 0)
-    .map((w) => currentConfig.improvementSuggestions[w])
-    .filter(Boolean);
+  const handleSelectExercise = (exId: ExerciseType) => {
+    if (isAssessing) return;
+    setExercise(exId);
+    setCompleted(false);
+    resetAllAnalyzers();
+  };
+
+  const sportExercises = getExercisesBySport(selectedSport);
 
   return (
     <div style={{
@@ -517,187 +792,156 @@ export const Assessment: React.FC = () => {
       background: T.bg,
       color: T.onSurface,
       fontFamily: T.fontBody,
-      WebkitFontSmoothing: 'antialiased',
-      paddingBottom: '5rem',
+      padding: '1.5rem',
     }}>
-      <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none' }} />
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-      <style>{`
-        @media (max-width: 640px) {
-          .assessment-header {
-            flex-direction: column !important;
-            align-items: flex-start !important;
-          }
-          .assessment-exercise-tabs {
-            width: 100% !important;
-            justify-content: space-between !important;
-            overflow-x: auto !important;
-          }
-          .assessment-exercise-tabs button {
-            flex: 1 !important;
-            padding: 0.5rem 0.6rem !important;
-            font-size: 0.75rem !important;
-          }
-          .assessment-live-metrics {
-            grid-template-columns: repeat(2, 1fr) !important;
-            gap: 0.5rem !important;
-          }
-          .assessment-action-bar {
-            flex-direction: column !important;
-            align-items: stretch !important;
-          }
-          .assessment-action-bar > div {
-            width: 100% !important;
-          }
-          .assessment-action-bar button {
-            width: 100% !important;
-            justify-content: center !important;
-          }
-        }
-      `}</style>
+      <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-      <div style={{ maxWidth: '1600px', margin: '0 auto', padding: '1.5rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        
-        {/* Top Header Bar & Exercise Selector */}
-        <header
-          className="assessment-header"
-          style={{
-            borderBottom: T.border4,
-            paddingBottom: '1rem',
+        {/* Top Header & Sport Selector Bar */}
+        <header style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1rem',
+          background: T.surfaceLowest,
+          border: T.border3,
+          boxShadow: T.shadow6,
+          padding: '1.25rem 1.5rem',
+        }}>
+          <div style={{
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
             flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
             gap: '1rem',
-          }}
-        >
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.2rem' }}>
-              <span style={{
-                background: T.primaryContainer,
-                border: T.border2,
-                boxShadow: '2px 2px 0px 0px #1a1a1a',
-                padding: '0.2rem 0.5rem',
-                fontSize: '0.75rem',
-                fontWeight: 800,
-                fontFamily: T.fontHeadline,
-                textTransform: 'uppercase',
-              }}>
-                AI Movement Studio
-              </span>
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                padding: '0.2rem 0.5rem',
-                fontSize: '0.72rem',
-                fontWeight: 700,
-                fontFamily: T.fontHeadline,
-                background: syncStatus.isOnline ? '#E6F4EA' : '#FCE8E6',
-                color: syncStatus.isOnline ? '#137333' : '#C5221F',
-                border: '1.5px solid #1a1a1a',
-              }}>
-                {syncStatus.isOnline ? <Cloud size={12} /> : <CloudOff size={12} />}
-                <span>{syncStatus.isOnline ? 'Cloud Synced' : 'Offline Ready'}</span>
+          }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                <span style={{
+                  background: T.primaryContainer,
+                  border: T.border2,
+                  boxShadow: '2px 2px 0px 0px #1a1a1a',
+                  padding: '0.2rem 0.5rem',
+                  fontSize: '0.75rem',
+                  fontWeight: 800,
+                  fontFamily: T.fontHeadline,
+                  textTransform: 'uppercase',
+                }}>
+                  AI Sport Assessment Engine
+                </span>
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  padding: '0.2rem 0.5rem',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  fontFamily: T.fontHeadline,
+                  background: syncStatus.isOnline ? '#E6F4EA' : '#FCE8E6',
+                  color: syncStatus.isOnline ? '#137333' : '#C5221F',
+                  border: '1.5px solid #1a1a1a',
+                }}>
+                  {syncStatus.isOnline ? <Cloud size={12} /> : <CloudOff size={12} />}
+                  <span>{syncStatus.isOnline ? 'Cloud Synced' : 'Offline Ready'}</span>
+                </div>
               </div>
+              <h1 style={{
+                fontFamily: T.fontHeadline,
+                fontWeight: 900,
+                fontSize: 'clamp(1.5rem, 3.5vw, 2.25rem)',
+                letterSpacing: '-0.04em',
+                textTransform: 'uppercase',
+                lineHeight: 1.1,
+                color: T.primary,
+              }}>
+                {currentConfig.name} Assessment
+              </h1>
+              <p style={{ fontSize: '0.88rem', color: T.onSurfaceVariant, fontWeight: 600, marginTop: '0.25rem' }}>
+                {currentConfig.category} &bull; {currentConfig.sport}
+              </p>
             </div>
-            <h1 style={{
-              fontFamily: T.fontHeadline,
-              fontWeight: 900,
-              fontSize: 'clamp(1.75rem, 4vw, 2.5rem)',
-              letterSpacing: '-0.04em',
-              textTransform: 'uppercase',
-              lineHeight: 1.1,
-              color: T.primary,
-            }}>
-              {currentConfig.name} Assessment
-            </h1>
-          </div>
 
-          {/* Exercise Selection Tabs */}
-          <div
-            className="assessment-exercise-tabs"
-            style={{
+            {/* Sport Selector Tabs */}
+            <div style={{
               display: 'flex',
-              gap: '0.5rem',
+              flexWrap: 'wrap',
+              gap: '0.4rem',
               background: T.surfaceVariant,
               padding: '0.35rem',
               border: T.border3,
               boxShadow: '3px 3px 0px 0px #1a1a1a',
-            }}
-          >
-            <button
-              disabled={isAssessing}
-              onClick={() => { setExercise('curl'); setCompleted(false); }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                padding: '0.5rem 1rem',
-                fontFamily: T.fontHeadline,
-                fontWeight: 800,
-                fontSize: '0.85rem',
-                textTransform: 'uppercase',
-                border: exercise === 'curl' ? T.border2 : '2px solid transparent',
-                background: exercise === 'curl' ? T.primaryContainer : 'transparent',
-                color: T.primary,
-                cursor: isAssessing ? 'not-allowed' : 'pointer',
-                boxShadow: exercise === 'curl' ? '2px 2px 0px 0px #1a1a1a' : 'none',
-              }}
-            >
-              <Dumbbell size={16} />
-              <span>Dumbbell Curl</span>
-            </button>
+            }}>
+              {SPORTS_LIST.map((s) => {
+                const isSelected = selectedSport === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    disabled={isAssessing}
+                    onClick={() => handleSelectSport(s.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.5rem 0.85rem',
+                      fontFamily: T.fontHeadline,
+                      fontWeight: 800,
+                      fontSize: '0.85rem',
+                      textTransform: 'uppercase',
+                      border: isSelected ? T.border2 : '2px solid transparent',
+                      background: isSelected ? T.primaryContainer : 'transparent',
+                      color: T.primary,
+                      cursor: isAssessing ? 'not-allowed' : 'pointer',
+                      boxShadow: isSelected ? '2px 2px 0px 0px #1a1a1a' : 'none',
+                      transition: 'all 0.1s ease',
+                    }}
+                  >
+                    <span>{s.icon}</span>
+                    <span>{s.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-            <button
-              disabled={isAssessing}
-              onClick={() => { setExercise('pushup'); setCompleted(false); }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                padding: '0.5rem 1rem',
-                fontFamily: T.fontHeadline,
-                fontWeight: 800,
-                fontSize: '0.85rem',
-                textTransform: 'uppercase',
-                border: exercise === 'pushup' ? T.border2 : '2px solid transparent',
-                background: exercise === 'pushup' ? T.primaryContainer : 'transparent',
-                color: T.primary,
-                cursor: isAssessing ? 'not-allowed' : 'pointer',
-                boxShadow: exercise === 'pushup' ? '2px 2px 0px 0px #1a1a1a' : 'none',
-              }}
-            >
-              <Activity size={16} />
-              <span>Push-Up</span>
-            </button>
-
-            <button
-              disabled={isAssessing}
-              onClick={() => { setExercise('squat'); setCompleted(false); }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                padding: '0.5rem 1rem',
-                fontFamily: T.fontHeadline,
-                fontWeight: 800,
-                fontSize: '0.85rem',
-                textTransform: 'uppercase',
-                border: exercise === 'squat' ? T.border2 : '2px solid transparent',
-                background: exercise === 'squat' ? T.primaryContainer : 'transparent',
-                color: T.primary,
-                cursor: isAssessing ? 'not-allowed' : 'pointer',
-                boxShadow: exercise === 'squat' ? '2px 2px 0px 0px #1a1a1a' : 'none',
-              }}
-            >
-              <Target size={16} />
-              <span>Squat</span>
-            </button>
+          {/* Sport's Exercises Pills */}
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '0.5rem',
+            borderTop: '2px dashed #d6d1c9',
+            paddingTop: '0.75rem',
+          }}>
+            {sportExercises.map((ex) => {
+              const isSelected = exercise === ex.id;
+              return (
+                <button
+                  key={ex.id}
+                  disabled={isAssessing}
+                  onClick={() => handleSelectExercise(ex.id)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.4rem 0.85rem',
+                    fontFamily: T.fontHeadline,
+                    fontWeight: isSelected ? 900 : 700,
+                    fontSize: '0.82rem',
+                    border: isSelected ? T.border2 : '1.5px solid #1a1a1a',
+                    background: isSelected ? T.tertiaryContainer : T.surfaceLowest,
+                    color: isSelected ? T.tertiary : T.primary,
+                    cursor: isAssessing ? 'not-allowed' : 'pointer',
+                    boxShadow: isSelected ? '2px 2px 0px 0px #0055ff' : '2px 2px 0px 0px #1a1a1a',
+                    transform: isSelected ? 'translate(-1px, -1px)' : 'none',
+                    transition: 'all 0.1s ease',
+                  }}
+                >
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: isSelected ? T.tertiary : '#888' }} />
+                  <span>{ex.name}</span>
+                </button>
+              );
+            })}
           </div>
         </header>
 
-        {/* Setup & Positioning Guide Box */}
+        {/* Setup & Instructions Banner */}
         {!isAssessing && !completed && (
           <div style={{
             background: T.surfaceLowest,
@@ -711,7 +955,7 @@ export const Assessment: React.FC = () => {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: T.primary, fontWeight: 900, fontFamily: T.fontHeadline, textTransform: 'uppercase', fontSize: '0.95rem' }}>
                 <CameraIcon size={18} color={T.tertiary} />
-                <span>Camera Setup</span>
+                <span>Camera Setup &bull; {currentConfig.cameraSetup.view}</span>
               </div>
               <p style={{ fontSize: '0.88rem', color: T.onSurfaceVariant, marginTop: '0.35rem', lineHeight: 1.4 }}>
                 {currentConfig.cameraSetup.instructions}
@@ -721,7 +965,7 @@ export const Assessment: React.FC = () => {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: T.primary, fontWeight: 900, fontFamily: T.fontHeadline, textTransform: 'uppercase', fontSize: '0.95rem' }}>
                 <Info size={18} color={T.primaryContainer} />
-                <span>Instructions</span>
+                <span>Drill Instructions</span>
               </div>
               <ol style={{ fontSize: '0.85rem', color: T.onSurfaceVariant, marginTop: '0.35rem', paddingLeft: '1.2rem', lineHeight: 1.4 }}>
                 {currentConfig.instructions.slice(0, 3).map((step, i) => (
@@ -729,79 +973,87 @@ export const Assessment: React.FC = () => {
                 ))}
               </ol>
             </div>
-
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: T.primary, fontWeight: 900, fontFamily: T.fontHeadline, textTransform: 'uppercase', fontSize: '0.95rem' }}>
-                <Activity size={18} color={T.secondary} />
-                <span>AI Evaluates</span>
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.35rem' }}>
-                {currentConfig.measuredMetrics.map((m, i) => (
-                  <span key={i} style={{ background: T.surfaceVariant, border: T.border2, fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.45rem', fontFamily: T.fontHeadline }}>
-                    {m}
-                  </span>
-                ))}
-              </div>
-            </div>
           </div>
         )}
 
-        {/* Main Two-Column Studio Layout */}
-        <main style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
-          gap: '2rem',
-          alignItems: 'start',
-        }}>
-          
-          {/* LEFT COLUMN: CAMERA / SKELETON VIEWPORT */}
-          <section style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-end',
-              borderBottom: T.border4,
-              paddingBottom: '0.5rem',
-            }}>
-              <h2 style={{
-                fontFamily: T.fontHeadline,
-                fontWeight: 900,
-                fontSize: '1.85rem',
-                textTransform: 'uppercase',
-                letterSpacing: '-0.02em',
-                color: T.primary,
-              }}>
-                Live Camera Feed
-              </h2>
+        {/* Main Grid: Camera Studio (Left) + Live Analytics HUD (Right) */}
+        <style>{`
+          .kreedai-assessment-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 1.5rem;
+            align-items: start;
+          }
+          .kreedai-camera-frame {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 4/3;
+            background: #0a0a0a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+          }
+          .kreedai-hud-mobile-overlays {
+            display: none;
+          }
+          .kreedai-hud-desktop-sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+          }
+          @media (max-width: 768px) {
+            .kreedai-assessment-grid {
+              display: flex;
+              flex-direction: column;
+              gap: 1rem;
+            }
+            .kreedai-camera-frame {
+              aspect-ratio: auto;
+              height: clamp(480px, 72vh, 640px);
+              border-radius: 4px;
+            }
+            .kreedai-hud-mobile-overlays {
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+              position: absolute;
+              inset: 0;
+              padding: 0.75rem;
+              pointer-events: none;
+              z-index: 10;
+            }
+            .kreedai-hud-mobile-overlays * {
+              pointer-events: auto;
+            }
+            .kreedai-hud-desktop-sidebar {
+              display: none;
+            }
+          }
+        `}</style>
 
-              <span style={{
-                fontFamily: T.fontHeadline,
-                fontWeight: 800,
-                fontSize: '0.85rem',
-                color: T.secondary,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                textTransform: 'uppercase',
-              }}>
-                <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: T.secondary, display: 'inline-block' }} />
-                {isAssessing ? 'REC • ASSESSING' : (isCameraActive ? 'READY' : 'STANDBY')}
-              </span>
-            </div>
+        <div className="kreedai-assessment-grid">
 
-            {/* Camera Overlay Container */}
-            <div style={{
-              position: 'relative',
-              width: '100%',
-              aspectRatio: '16/10',
-              background: '#090d16',
-              border: T.border4,
-              boxShadow: T.shadow6,
-              overflow: 'hidden',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
+          {/* Left: Video & Canvas Stream */}
+          <div style={{
+            background: T.surfaceLowest,
+            border: T.border4,
+            boxShadow: T.shadow8,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            position: 'relative',
+          }}>
+            {/* Viewport Frame */}
+            <div className="kreedai-camera-frame">
+              <video
+                ref={videoRef}
+                playsInline
+                muted
+                style={{
+                  display: 'none',
+                }}
+              />
               <canvas
                 ref={canvasRef}
                 width={1280}
@@ -810,486 +1062,899 @@ export const Assessment: React.FC = () => {
                   width: '100%',
                   height: '100%',
                   objectFit: 'cover',
-                  display: isCameraActive ? 'block' : 'none',
-                  transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
                 }}
               />
 
-              {isCameraActive && (
+              {/* Camera Off Placeholder */}
+              {!isCameraActive && !isCameraLoading && (
                 <div style={{
-                  position: 'absolute', top: '1rem', right: '1rem',
-                  background: T.primary, color: T.primaryContainer,
-                  fontFamily: T.fontHeadline, fontWeight: 700, fontSize: '0.75rem',
-                  padding: '0.25rem 0.5rem', border: T.border2, zIndex: 20,
-                }}>
-                  {fps > 0 ? `${fps} FPS` : '60 FPS'}
-                </div>
-              )}
-
-              {!isCameraActive && (
-                <div style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center',
-                  justifyContent: 'center', padding: '2rem', textAlign: 'center',
-                  gap: '1rem', color: '#ffffff',
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '1rem',
+                  color: '#ffffff',
+                  padding: '2rem',
+                  textAlign: 'center',
+                  background: 'rgba(26, 26, 26, 0.95)',
+                  zIndex: 20,
                 }}>
                   <div style={{
-                    width: '64px', height: '64px', borderRadius: '50%',
-                    background: T.primaryContainer, border: '3px solid #1a1a1a',
-                    boxShadow: '3px 3px 0px 0px #ffffff', display: 'flex',
-                    alignItems: 'center', justifyContent: 'center',
+                    width: '64px',
+                    height: '64px',
+                    borderRadius: '50%',
+                    background: T.primaryContainer,
+                    border: T.border3,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: T.primary,
+                    boxShadow: '4px 4px 0px 0px #ffffff',
                   }}>
-                    {isCameraLoading ? <Loader2 size={30} color={T.primary} className="kreedai-spin" /> : <CameraIcon size={30} color={T.primary} />}
+                    <CameraIcon size={32} />
                   </div>
-
                   <div>
-                    <h3 style={{ fontFamily: T.fontHeadline, fontWeight: 800, fontSize: '1.25rem', textTransform: 'uppercase', color: '#ffffff' }}>
-                      {isCameraLoading ? 'Initializing MediaPipe...' : `${currentConfig.name} Camera`}
+                    <h3 style={{ fontFamily: T.fontHeadline, fontWeight: 900, textTransform: 'uppercase', fontSize: '1.25rem', letterSpacing: '-0.02em' }}>
+                      {cameraError ? 'Camera Error' : 'Camera Offline'}
                     </h3>
-                    <p style={{ fontSize: '0.85rem', color: '#a0aec0', maxWidth: '380px', marginTop: '0.25rem' }}>
-                      {cameraError ? <span style={{ color: '#ff6b6b' }}>{cameraError}</span> : currentConfig.cameraSetup.instructions}
+                    <p style={{ fontSize: '0.85rem', color: cameraError ? '#ff8080' : '#a0a0a0', maxWidth: '300px', marginTop: '0.25rem' }}>
+                      {cameraError || 'Enable webcam to initialize MediaPipe AI pose skeleton and real-time audio biomechanical coaching.'}
                     </p>
                   </div>
-
                   <button
-                    disabled={isCameraLoading}
-                    onClick={() => handleStartCamera(facingMode)}
+                    onClick={() => handleStartCamera()}
                     style={{
-                      background: T.primaryContainer, color: T.primary,
-                      border: T.border3, boxShadow: '4px 4px 0px 0px #ffffff',
-                      padding: '0.75rem 1.75rem', fontFamily: T.fontHeadline,
-                      fontWeight: 800, fontSize: '0.95rem', textTransform: 'uppercase',
-                      cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.75rem 1.5rem',
+                      background: T.primaryContainer,
+                      color: T.primary,
+                      border: T.border3,
+                      boxShadow: '4px 4px 0px 0px #ffffff',
+                      fontFamily: T.fontHeadline,
+                      fontWeight: 900,
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
                     }}
                   >
-                    <CameraIcon size={18} />
-                    <span>Start Camera</span>
+                    <Play size={18} fill={T.primary} />
+                    <span>Start Video Feed</span>
                   </button>
                 </div>
               )}
 
-              {isCameraActive && (
+              {/* Camera Loading Spinner */}
+              {isCameraLoading && (
                 <div style={{
-                  position: 'absolute', top: '1rem', left: '50%', transform: 'translateX(-50%)',
-                  background: T.primary, color: T.primaryContainer, fontFamily: T.fontHeadline,
-                  fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase',
-                  padding: '0.5rem 1.25rem', border: T.border2, boxShadow: '3px 3px 0px 0px rgba(0,0,0,0.5)',
-                  zIndex: 20, whiteSpace: 'nowrap',
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '1rem',
+                  background: 'rgba(0,0,0,0.85)',
+                  color: '#ffffff',
+                  zIndex: 20,
                 }}>
-                  {liveFeedback}
+                  <Loader2 size={40} className="animate-spin" color={T.primaryContainer} />
+                  <p style={{ fontFamily: T.fontHeadline, fontWeight: 800, textTransform: 'uppercase' }}>
+                    Loading MediaPipe WASM Models...
+                  </p>
                 </div>
               )}
 
-              {/* Angle HUD Meter */}
+              {/* Desktop-only Top Badges */}
               {isCameraActive && (
-                <div style={{
-                  position: 'absolute', top: '50%', left: '1rem', transform: 'translateY(-50%)',
-                  background: 'rgba(255, 255, 255, 0.92)', border: T.border2, boxShadow: '3px 3px 0px 0px #1a1a1a',
-                  padding: '0.75rem', zIndex: 20, minWidth: '95px',
+                <div className="kreedai-desktop-links" style={{
+                  position: 'absolute',
+                  top: '1rem',
+                  left: '1rem',
+                  right: '1rem',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  zIndex: 5,
                 }}>
-                  <div style={{ fontFamily: T.fontHeadline, fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase', color: T.onSurfaceVariant }}>
-                    ROM %
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <div style={{
+                      background: isAssessing ? T.secondary : '#10b981',
+                      color: '#ffffff',
+                      padding: '0.25rem 0.6rem',
+                      border: '2px solid #ffffff',
+                      boxShadow: '2px 2px 0px 0px #000000',
+                      fontSize: '0.75rem',
+                      fontWeight: 900,
+                      fontFamily: T.fontHeadline,
+                      textTransform: 'uppercase',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                    }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ffffff' }} />
+                      <span>{isAssessing ? 'TESTING IN PROGRESS' : 'CALIBRATING POSE'}</span>
+                    </div>
+
+                    <div style={{
+                      background: 'rgba(0,0,0,0.75)',
+                      color: '#ffffff',
+                      padding: '0.25rem 0.6rem',
+                      border: '1.5px solid #ffffff',
+                      fontSize: '0.75rem',
+                      fontWeight: 800,
+                      fontFamily: T.fontHeadline,
+                    }}>
+                      {fps} FPS
+                    </div>
                   </div>
-                  <div style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '1.6rem', lineHeight: 1, color: T.primary, marginTop: '0.2rem' }}>
-                    {romPercent}%
-                  </div>
-                  <div style={{ width: '100%', height: '6px', background: '#e2ddd4', border: '1px solid #1a1a1a', marginTop: '0.4rem' }}>
-                    <div style={{ height: '100%', background: romPercent >= 80 ? '#10b981' : T.secondary, width: `${romPercent}%` }} />
-                  </div>
-                </div>
-              )}
-            </div>
 
-            {/* Live Metrics Grid */}
-            <div className="assessment-live-metrics" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
-              <div style={{ background: T.primaryContainer, border: T.border3, boxShadow: T.shadow4, padding: '0.85rem' }}>
-                <div style={{ fontFamily: T.fontHeadline, fontWeight: 800, fontSize: '0.7rem', textTransform: 'uppercase', color: T.primary }}>
-                  Reps
-                </div>
-                <div style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '2.5rem', lineHeight: 1, color: T.primary, marginTop: '0.25rem' }}>
-                  {repCount}
-                </div>
-              </div>
-
-              <div style={{ background: T.surfaceLowest, border: T.border3, boxShadow: T.shadow4, padding: '0.85rem' }}>
-                <div style={{ fontFamily: T.fontHeadline, fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase', color: T.onSurfaceVariant }}>
-                  TUT Sec
-                </div>
-                <div style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '2rem', lineHeight: 1.1, color: T.primary, marginTop: '0.25rem' }}>
-                  {duration}s
-                </div>
-              </div>
-
-              <div style={{ background: T.surfaceLowest, border: T.border3, boxShadow: T.shadow4, padding: '0.85rem' }}>
-                <div style={{ fontFamily: T.fontHeadline, fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase', color: T.onSurfaceVariant }}>
-                  Joint Angle
-                </div>
-                <div style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '2rem', lineHeight: 1.1, color: T.primary, marginTop: '0.25rem' }}>
-                  {currentAngle}°
-                </div>
-              </div>
-
-              <div style={{ background: T.surfaceLowest, border: T.border3, boxShadow: T.shadow4, padding: '0.85rem' }}>
-                <div style={{ fontFamily: T.fontHeadline, fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase', color: T.onSurfaceVariant }}>
-                  Stability
-                </div>
-                <div style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '1.6rem', lineHeight: 1.2, color: T.tertiary, marginTop: '0.25rem', textTransform: 'uppercase' }}>
-                  {stabilityScore}%
-                </div>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div
-              className="assessment-action-bar"
-              style={{
-                background: T.surfaceLowest, border: T.border3, boxShadow: T.shadow6,
-                padding: '1.25rem', display: 'flex', justifyContent: 'space-between',
-                alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem',
-              }}
-            >
-              <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
-                {!isAssessing ? (
                   <button
-                    onClick={handleStartAssessment}
+                    onClick={handleFlipCamera}
                     style={{
-                      background: T.primaryContainer, color: T.primary,
-                      border: T.border3, boxShadow: '3px 3px 0px 0px #1a1a1a',
-                      padding: '0.75rem 1.5rem', fontFamily: T.fontHeadline,
-                      fontWeight: 900, fontSize: '0.95rem', textTransform: 'uppercase',
-                      cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+                      background: T.surfaceLowest,
+                      border: T.border2,
+                      boxShadow: '2px 2px 0px 0px #000000',
+                      padding: '0.4rem 0.6rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 800,
+                      fontFamily: T.fontHeadline,
+                      textTransform: 'uppercase',
                     }}
                   >
-                    <Play size={18} fill="#1a1a1a" />
-                    <span>Start AI Assessment</span>
+                    <SwitchCamera size={14} />
+                    <span>Flip</span>
+                  </button>
+                </div>
+              )}
+
+              {/* ── MOBILE / PWA OVERLAID HUD GUIDELINES ───────────────────────── */}
+              {isCameraActive && (
+                <div className="kreedai-hud-mobile-overlays">
+                  {/* Top Bar Overlays: Coaching Cue & Warnings & Status */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '0.5rem',
+                    }}>
+                      <div style={{
+                        background: isAssessing ? T.secondary : '#10b981',
+                        color: '#ffffff',
+                        padding: '0.2rem 0.5rem',
+                        border: '1.5px solid #1a1a1a',
+                        boxShadow: '2px 2px 0px 0px #1a1a1a',
+                        fontSize: '0.65rem',
+                        fontWeight: 900,
+                        fontFamily: T.fontHeadline,
+                        textTransform: 'uppercase',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                      }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ffffff' }} />
+                        <span>{isAssessing ? `ASSESSING (${duration}s)` : 'CAMERA ACTIVE'}</span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <div style={{
+                          background: 'rgba(0,0,0,0.8)',
+                          color: '#ffffff',
+                          padding: '0.2rem 0.45rem',
+                          border: '1.5px solid #1a1a1a',
+                          fontSize: '0.65rem',
+                          fontWeight: 800,
+                          fontFamily: T.fontHeadline,
+                        }}>
+                          {fps} FPS
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleFlipCamera}
+                          style={{
+                            background: T.surfaceLowest,
+                            border: '1.5px solid #1a1a1a',
+                            boxShadow: '2px 2px 0px 0px #1a1a1a',
+                            padding: '0.25rem 0.45rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
+                            fontSize: '0.65rem',
+                            fontWeight: 800,
+                            fontFamily: T.fontHeadline,
+                            textTransform: 'uppercase',
+                          }}
+                        >
+                          <SwitchCamera size={12} />
+                          <span>Flip</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* AI Coaching Cue Banner (Overlaid) */}
+                    <div style={{
+                      background: isAssessing ? T.primaryContainer : 'rgba(255, 255, 255, 0.95)',
+                      border: '2.5px solid #1a1a1a',
+                      boxShadow: '3px 3px 0px 0px #1a1a1a',
+                      padding: '0.5rem 0.75rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                    }}>
+                      <Zap size={16} color={T.primary} style={{ flexShrink: 0 }} />
+                      <p style={{
+                        fontFamily: T.fontHeadline,
+                        fontWeight: 900,
+                        fontSize: '0.78rem',
+                        lineHeight: 1.25,
+                        color: T.primary,
+                        textTransform: 'uppercase',
+                        margin: 0,
+                      }}>
+                        {liveFeedback}
+                      </p>
+                    </div>
+
+                    {/* Active Warning Badges */}
+                    {activeWarnings.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                        {activeWarnings.slice(-2).map((w, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              background: T.secondaryContainer,
+                              color: T.secondary,
+                              border: '1.5px solid #e63b2e',
+                              boxShadow: '1px 1px 0px 0px #1a1a1a',
+                              padding: '0.15rem 0.4rem',
+                              fontSize: '0.68rem',
+                              fontWeight: 800,
+                              fontFamily: T.fontHeadline,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.25rem',
+                            }}
+                          >
+                            <AlertTriangle size={11} />
+                            <span>{w}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Mid Floating Widgets (ROM, Stability on Left | Reps, Angle on Right) */}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    width: '100%',
+                    padding: '0.25rem 0',
+                  }}>
+                    {/* Left Badges: ROM % & Stability */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      <div style={{
+                        background: '#ffffff',
+                        border: '2px solid #1a1a1a',
+                        boxShadow: '2.5px 2.5px 0px 0px #1a1a1a',
+                        padding: '0.4rem 0.6rem',
+                        minWidth: '85px',
+                      }}>
+                        <div style={{ fontSize: '0.62rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase', color: T.onSurfaceVariant }}>
+                          ROM %
+                        </div>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 900, fontFamily: T.fontHeadline, lineHeight: 1.1, color: T.primary }}>
+                          {romPercent}%
+                        </div>
+                        <div style={{ height: '5px', background: '#e8e3da', border: '1px solid #1a1a1a', marginTop: '0.25rem', width: '100%' }}>
+                          <div style={{ height: '100%', width: `${romPercent}%`, background: T.tertiary, transition: 'width 0.15s ease' }} />
+                        </div>
+                      </div>
+
+                      <div style={{
+                        background: '#ffffff',
+                        border: '2px solid #1a1a1a',
+                        boxShadow: '2.5px 2.5px 0px 0px #1a1a1a',
+                        padding: '0.35rem 0.55rem',
+                        minWidth: '85px',
+                      }}>
+                        <div style={{ fontSize: '0.6rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase', color: T.onSurfaceVariant }}>
+                          STABILITY
+                        </div>
+                        <div style={{ fontSize: '1.05rem', fontWeight: 900, fontFamily: T.fontHeadline, color: '#059669', lineHeight: 1.1 }}>
+                          {stabilityScore}%
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Badges: Reps & Joint Angle */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+                      <div style={{
+                        background: T.primaryContainer,
+                        border: '2.5px solid #1a1a1a',
+                        boxShadow: '2.5px 2.5px 0px 0px #1a1a1a',
+                        padding: '0.4rem 0.75rem',
+                        textAlign: 'center',
+                        minWidth: '85px',
+                      }}>
+                        <div style={{ fontSize: '0.62rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase', color: T.primary }}>
+                          REPS
+                        </div>
+                        <div style={{ fontSize: '1.6rem', fontWeight: 900, fontFamily: T.fontHeadline, lineHeight: 1, color: T.primary }}>
+                          {repCount}
+                        </div>
+                      </div>
+
+                      <div style={{
+                        background: '#ffffff',
+                        border: '2px solid #1a1a1a',
+                        boxShadow: '2.5px 2.5px 0px 0px #1a1a1a',
+                        padding: '0.35rem 0.55rem',
+                        textAlign: 'center',
+                        minWidth: '85px',
+                      }}>
+                        <div style={{ fontSize: '0.6rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase', color: T.onSurfaceVariant }}>
+                          JOINT ANGLE
+                        </div>
+                        <div style={{ fontSize: '1.05rem', fontWeight: 900, fontFamily: T.fontHeadline, color: T.tertiary, lineHeight: 1.1 }}>
+                          {currentAngle}°
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bottom Overlaid Action Button */}
+                  <div style={{ display: 'flex', justifyContent: 'center', width: '100%', paddingBottom: '0.25rem' }}>
+                    {!isAssessing ? (
+                      <button
+                        type="button"
+                        onClick={handleStartAssessment}
+                        style={{
+                          width: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.5rem',
+                          padding: '0.75rem 1.25rem',
+                          background: T.primaryContainer,
+                          color: T.primary,
+                          border: '3px solid #1a1a1a',
+                          boxShadow: '4px 4px 0px 0px #1a1a1a',
+                          fontFamily: T.fontHeadline,
+                          fontWeight: 900,
+                          fontSize: '0.92rem',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <Play size={16} fill={T.primary} />
+                        <span>Start AI Assessment</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleStopAssessment}
+                        style={{
+                          width: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.5rem',
+                          padding: '0.75rem 1.25rem',
+                          background: T.secondary,
+                          color: '#ffffff',
+                          border: '3px solid #1a1a1a',
+                          boxShadow: '4px 4px 0px 0px #1a1a1a',
+                          fontFamily: T.fontHeadline,
+                          fontWeight: 900,
+                          fontSize: '0.92rem',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <Square size={16} fill="#ffffff" />
+                        <span>End Test ({duration}s)</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Desktop-only Camera & Assessment Controls Footer */}
+            <div className="kreedai-desktop-links" style={{
+              padding: '1rem 1.25rem',
+              background: T.surfaceLowest,
+              borderTop: T.border3,
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.75rem',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                {isCameraActive ? (
+                  <button
+                    onClick={handleStopCamera}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.5rem 1rem',
+                      background: T.surfaceVariant,
+                      border: T.border2,
+                      boxShadow: '2px 2px 0px 0px #1a1a1a',
+                      fontFamily: T.fontHeadline,
+                      fontWeight: 800,
+                      fontSize: '0.82rem',
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <CameraOff size={16} />
+                    <span>Stop Camera</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleStartCamera()}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.5rem 1rem',
+                      background: T.primaryContainer,
+                      border: T.border2,
+                      boxShadow: '2px 2px 0px 0px #1a1a1a',
+                      fontFamily: T.fontHeadline,
+                      fontWeight: 800,
+                      fontSize: '0.82rem',
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <CameraIcon size={16} />
+                    <span>Enable Camera</span>
+                  </button>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                {!isAssessing ? (
+                  <button
+                    disabled={!isCameraActive}
+                    onClick={handleStartAssessment}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.65rem 1.5rem',
+                      background: !isCameraActive ? T.surfaceDim : T.primaryContainer,
+                      color: T.primary,
+                      border: T.border3,
+                      boxShadow: !isCameraActive ? 'none' : T.shadow4,
+                      fontFamily: T.fontHeadline,
+                      fontWeight: 900,
+                      fontSize: '0.95rem',
+                      textTransform: 'uppercase',
+                      cursor: !isCameraActive ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    <Play size={18} fill={T.primary} />
+                    <span>Start Test</span>
                   </button>
                 ) : (
                   <button
                     onClick={handleStopAssessment}
                     style={{
-                      background: T.secondary, color: '#ffffff',
-                      border: T.border3, boxShadow: '3px 3px 0px 0px #1a1a1a',
-                      padding: '0.75rem 1.5rem', fontFamily: T.fontHeadline,
-                      fontWeight: 900, fontSize: '0.95rem', textTransform: 'uppercase',
-                      cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.65rem 1.5rem',
+                      background: T.secondary,
+                      color: '#ffffff',
+                      border: T.border3,
+                      boxShadow: T.shadow4,
+                      fontFamily: T.fontHeadline,
+                      fontWeight: 900,
+                      fontSize: '0.95rem',
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
                     }}
                   >
                     <Square size={18} fill="#ffffff" />
-                    <span>Finish & Show Results</span>
+                    <span>End Test ({duration}s)</span>
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
 
-                <button
-                  disabled={isCameraLoading}
-                  onClick={isCameraActive ? handleStopCamera : () => handleStartCamera(facingMode)}
-                  style={{
-                    background: T.surfaceLowest, color: T.primary,
-                    border: T.border2, boxShadow: '2px 2px 0px 0px #1a1a1a',
-                    padding: '0.65rem 1rem', fontFamily: T.fontHeadline,
-                    fontWeight: 700, fontSize: '0.85rem', textTransform: 'uppercase',
-                    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
-                  }}
-                >
-                  {isCameraActive ? <CameraOff size={16} /> : <CameraIcon size={16} />}
-                  <span>{isCameraActive ? 'Stop Camera' : 'Start Camera'}</span>
-                </button>
-
-                <button
-                  onClick={handleFlipCamera}
-                  style={{
-                    background: T.surfaceLowest, color: T.primary, border: T.border2,
-                    boxShadow: '2px 2px 0px 0px #1a1a1a', padding: '0.65rem 0.85rem',
-                    fontFamily: T.fontHeadline, fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer',
-                  }}
-                >
-                  <SwitchCamera size={16} />
-                </button>
-
-                <button
-                  onClick={() => {
-                    squatAnalyzerRef.current.reset();
-                    pushupAnalyzerRef.current.reset();
-                    curlAnalyzerRef.current.reset();
-                    landmarkSamplesRef.current = [];
-                    setRepCount(0);
-                    setDuration(0);
-                    setScore({ totalScore: 0, formAccuracy: 0, depthScore: 0, cadenceScore: 0, symmetryScore: 0, grade: 'D', repsCompleted: 0, validReps: 0 });
-                    setCompleted(false);
-                    setActiveWarnings([]);
-                    setLiveFeedback('Session reset. Ready for assessment.');
-                  }}
-                  style={{
-                    background: T.surfaceLowest, color: T.primary, border: T.border2,
-                    boxShadow: '2px 2px 0px 0px #1a1a1a', padding: '0.65rem 0.85rem',
-                    fontFamily: T.fontHeadline, fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer',
-                  }}
-                >
-                  <RotateCcw size={16} />
-                </button>
+          {/* Right / Sidebar: Real-time Biomechanical HUD & Coaching (Desktop) */}
+          <div className="kreedai-hud-desktop-sidebar">
+            {/* Live Audio & Visual Coaching Box */}
+            <div style={{
+              background: T.surfaceLowest,
+              border: T.border4,
+              boxShadow: T.shadow8,
+              padding: '1.25rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.75rem',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <Zap size={18} color={T.primaryContainer} />
+                  <span style={{ fontFamily: T.fontHeadline, fontWeight: 900, textTransform: 'uppercase', fontSize: '0.88rem' }}>
+                    Live AI Coaching Cue
+                  </span>
+                </div>
+                <span style={{
+                  fontSize: '0.72rem',
+                  fontWeight: 800,
+                  fontFamily: T.fontHeadline,
+                  background: '#1a1a1a',
+                  color: '#ffffff',
+                  padding: '0.15rem 0.45rem',
+                }}>
+                  AUDIO BEEP SYNTH
+                </span>
               </div>
 
-              {isAssessing && (
-                <div style={{ display: 'flex', gap: '0.35rem' }}>
-                  <button
-                    onClick={() => handleSimulateRep(true)}
-                    style={{ background: T.tertiary, color: '#fff', border: '1.5px solid #1a1a1a', padding: '0.4rem 0.65rem', fontSize: '0.72rem', fontFamily: T.fontHeadline, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer' }}
-                  >
-                    + Valid Rep
-                  </button>
-                  <button
-                    onClick={() => handleSimulateRep(false)}
-                    style={{ background: T.surfaceVariant, color: T.primary, border: '1.5px solid #1a1a1a', padding: '0.4rem 0.65rem', fontSize: '0.72rem', fontFamily: T.fontHeadline, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer' }}
-                  >
-                    + Warning Rep
-                  </button>
+              <div style={{
+                background: isAssessing ? T.primaryContainer : T.surfaceVariant,
+                border: T.border3,
+                boxShadow: '3px 3px 0px 0px #1a1a1a',
+                padding: '1rem',
+                minHeight: '75px',
+                display: 'flex',
+                alignItems: 'center',
+              }}>
+                <p style={{
+                  fontFamily: T.fontHeadline,
+                  fontWeight: 900,
+                  fontSize: '1.05rem',
+                  lineHeight: 1.3,
+                  color: T.primary,
+                  textTransform: 'uppercase',
+                }}>
+                  {liveFeedback}
+                </p>
+              </div>
+
+              {/* Active Warning Badges */}
+              {activeWarnings.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                  {activeWarnings.slice(-3).map((w, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        background: T.secondaryContainer,
+                        color: T.secondary,
+                        border: '1.5px solid #e63b2e',
+                        padding: '0.2rem 0.5rem',
+                        fontSize: '0.75rem',
+                        fontWeight: 800,
+                        fontFamily: T.fontHeadline,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.3rem',
+                      }}
+                    >
+                      <AlertTriangle size={12} />
+                      <span>{w}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
-          </section>
 
-          {/* RIGHT COLUMN: ASSESSMENT RESULT & FORM BREAKDOWN */}
-          <section style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            
-            {/* Main Result Card */}
+            {/* Rep Counter & Primary Metric Cards */}
             <div style={{
-              background: T.primaryContainer,
-              border: T.border3,
-              boxShadow: T.shadow6,
-              padding: '1.75rem',
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '1rem',
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: T.border3, paddingBottom: '0.5rem', marginBottom: '1rem' }}>
-                <h3 style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '1.35rem', textTransform: 'uppercase', color: T.primary }}>
-                  {currentConfig.name}
-                </h3>
-                <div style={{ background: T.surfaceLowest, border: T.border2, boxShadow: '2px 2px 0px 0px #1a1a1a', padding: '0.3rem 0.75rem', fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '1.1rem', textTransform: 'uppercase', color: T.primary }}>
-                  GRADE {score.grade || 'D'}
+              <div style={{
+                background: T.surfaceLowest,
+                border: T.border3,
+                boxShadow: T.shadow6,
+                padding: '1.25rem',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase', color: T.onSurfaceVariant }}>
+                  Completed Reps / Actions
+                </span>
+                <div style={{
+                  fontFamily: T.fontHeadline,
+                  fontWeight: 900,
+                  fontSize: 'clamp(2.5rem, 5vw, 3.5rem)',
+                  lineHeight: 1,
+                  color: T.primary,
+                  marginTop: '0.5rem',
+                }}>
+                  {repCount}
                 </div>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.onSurfaceVariant, marginTop: '0.35rem' }}>
+                  Target: 10-15 controlled reps
+                </span>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-                <div>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase', color: T.primary, display: 'block' }}>
-                    FORM SCORE
-                  </span>
-                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.4rem' }}>
-                    <span style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '4.5rem', lineHeight: 0.9, letterSpacing: '-0.06em', color: T.primary }}>
-                      {score.totalScore || 0}
-                    </span>
-                    <span style={{ fontFamily: T.fontHeadline, fontWeight: 800, fontSize: '1.5rem', color: T.primary, marginBottom: '0.4rem' }}>
-                      /100
-                    </span>
-                  </div>
+              <div style={{
+                background: T.surfaceLowest,
+                border: T.border3,
+                boxShadow: T.shadow6,
+                padding: '1.25rem',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+              }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase', color: T.onSurfaceVariant }}>
+                  Joint Angle / Magnitude
+                </span>
+                <div style={{
+                  fontFamily: T.fontHeadline,
+                  fontWeight: 900,
+                  fontSize: 'clamp(2.5rem, 5vw, 3.5rem)',
+                  lineHeight: 1,
+                  color: T.tertiary,
+                  marginTop: '0.5rem',
+                }}>
+                  {currentAngle}°
                 </div>
-
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase', color: T.primary, display: 'block' }}>
-                    REPS COMPLETED
-                  </span>
-                  <span style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '2.5rem', color: T.primary }}>
-                    {score.validReps} / {score.repsCompleted}
-                  </span>
-                </div>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: T.onSurfaceVariant, marginTop: '0.35rem' }}>
+                  Real-time 33-landmark kinematic
+                </span>
               </div>
             </div>
 
-            {/* Metric Breakdown Metrics (ROM, Stability, Tempo, Consistency) */}
+            {/* Sub-Metrics Progress Bars */}
             <div style={{
               background: T.surfaceLowest,
               border: T.border3,
               boxShadow: T.shadow6,
-              padding: '1.5rem',
-            }}>
-              <h4 style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '1.1rem', textTransform: 'uppercase', marginBottom: '1rem', color: T.primary }}>
-                Movement Metrics
-              </h4>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontFamily: T.fontHeadline, fontSize: '0.85rem', marginBottom: '0.25rem' }}>
-                    <span>Range of Motion</span>
-                    <span>{romPercent}%</span>
-                  </div>
-                  <div style={{ width: '100%', height: '12px', border: T.border2, background: T.surfaceVariant }}>
-                    <div style={{ height: '100%', background: T.primary, width: `${romPercent}%` }} />
-                  </div>
-                </div>
-
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontFamily: T.fontHeadline, fontSize: '0.85rem', marginBottom: '0.25rem' }}>
-                    <span>Stability</span>
-                    <span>{stabilityScore}%</span>
-                  </div>
-                  <div style={{ width: '100%', height: '12px', border: T.border2, background: T.surfaceVariant }}>
-                    <div style={{ height: '100%', background: T.tertiary, width: `${stabilityScore}%` }} />
-                  </div>
-                </div>
-
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontFamily: T.fontHeadline, fontSize: '0.85rem', marginBottom: '0.25rem' }}>
-                    <span>Tempo & Control</span>
-                    <span>{tempoScore}%</span>
-                  </div>
-                  <div style={{ width: '100%', height: '12px', border: T.border2, background: T.surfaceVariant }}>
-                    <div style={{ height: '100%', background: T.primaryContainer, borderRight: '2px solid #1a1a1a', width: `${tempoScore}%` }} />
-                  </div>
-                </div>
-
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontFamily: T.fontHeadline, fontSize: '0.85rem', marginBottom: '0.25rem' }}>
-                    <span>Consistency</span>
-                    <span>{consistencyScore}%</span>
-                  </div>
-                  <div style={{ width: '100%', height: '12px', border: T.border2, background: T.surfaceVariant }}>
-                    <div style={{ height: '100%', background: '#10b981', width: `${consistencyScore}%` }} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Form Warnings Box */}
-            {activeWarnings.length > 0 && (
-              <div style={{
-                background: T.secondaryContainer,
-                border: T.border3,
-                borderLeft: `8px solid ${T.secondary}`,
-                boxShadow: T.shadow4,
-                padding: '1.25rem',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
-                  <AlertTriangle size={18} color={T.secondary} />
-                  <h4 style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '1rem', textTransform: 'uppercase', color: T.secondary }}>
-                    FORM WARNINGS DETECTED
-                  </h4>
-                </div>
-                <ul style={{ paddingLeft: '1.2rem', margin: 0, fontSize: '0.88rem', fontWeight: 700, fontFamily: T.fontHeadline, color: T.primary }}>
-                  {activeWarnings.map((w, i) => (
-                    <li key={i} style={{ marginBottom: '0.25rem' }}>
-                      ⚠ {w}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* AI Coach Feedback & Actionable Improvement */}
-            <div style={{
-              background: T.surfaceVariant,
-              border: T.border3,
-              boxShadow: T.shadow4,
               padding: '1.25rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.85rem',
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.35rem' }}>
-                <Sparkles size={18} color={T.primary} />
-                <h4 style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '1rem', textTransform: 'uppercase', color: T.primary }}>
-                  AI COACH FEEDBACK
-                </h4>
-              </div>
-              <p style={{ fontFamily: T.fontBody, fontSize: '0.9rem', fontWeight: 600, lineHeight: 1.5, color: T.primary, marginBottom: '0.75rem' }}>
-                {liveFeedback}
-              </p>
+              <span style={{ fontFamily: T.fontHeadline, fontWeight: 900, textTransform: 'uppercase', fontSize: '0.85rem' }}>
+                Biomechanical Breakdown
+              </span>
 
-              {currentSuggestions.length > 0 && (
-                <div>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase', color: T.onSurfaceVariant, display: 'block', marginBottom: '0.35rem' }}>
-                    IMPROVEMENT SUGGESTIONS:
-                  </span>
-                  <ul style={{ paddingLeft: '1.2rem', margin: 0, fontSize: '0.85rem', fontWeight: 600, fontFamily: T.fontBody, color: T.primary }}>
-                    {currentSuggestions.map((sug, i) => (
-                      <li key={i} style={{ marginBottom: '0.25rem' }}>{sug}</li>
-                    ))}
-                  </ul>
+              {/* Range of Motion / Depth */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+                  <span>Range of Motion / Depth</span>
+                  <span>{romPercent}%</span>
                 </div>
-              )}
+                <div style={{ height: '10px', background: T.surfaceVariant, border: T.border2 }}>
+                  <div style={{ height: '100%', width: `${romPercent}%`, background: T.tertiary, transition: 'width 0.15s ease' }} />
+                </div>
+              </div>
+
+              {/* Stability & Symmetry */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+                  <span>Stability & Symmetry</span>
+                  <span>{stabilityScore}%</span>
+                </div>
+                <div style={{ height: '10px', background: T.surfaceVariant, border: T.border2 }}>
+                  <div style={{ height: '100%', width: `${stabilityScore}%`, background: T.primaryContainer, transition: 'width 0.15s ease' }} />
+                </div>
+              </div>
+
+              {/* Cadence & Tempo */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+                  <span>Cadence & Tempo Control</span>
+                  <span>{tempoScore}%</span>
+                </div>
+                <div style={{ height: '10px', background: T.surfaceVariant, border: T.border2 }}>
+                  <div style={{ height: '100%', width: `${tempoScore}%`, background: '#10b981', transition: 'width 0.15s ease' }} />
+                </div>
+              </div>
+
+              {/* Form Consistency */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+                  <span>Form Consistency</span>
+                  <span>{consistencyScore}%</span>
+                </div>
+                <div style={{ height: '10px', background: T.surfaceVariant, border: T.border2 }}>
+                  <div style={{ height: '100%', width: `${consistencyScore}%`, background: T.secondary, transition: 'width 0.15s ease' }} />
+                </div>
+              </div>
             </div>
 
-            {/* Session Logs List */}
+            {/* Rep-by-Rep Log Feed */}
             {repLogs.length > 0 && (
               <div style={{
                 background: T.surfaceLowest,
                 border: T.border3,
-                boxShadow: T.shadow4,
-                padding: '1rem 1.25rem',
+                boxShadow: T.shadow6,
+                padding: '1rem',
                 maxHeight: '160px',
                 overflowY: 'auto',
               }}>
-                <h4 style={{ fontFamily: T.fontHeadline, fontWeight: 800, fontSize: '0.8rem', textTransform: 'uppercase', color: T.onSurfaceVariant, marginBottom: '0.5rem' }}>
-                  Rep Evaluation Log
-                </h4>
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 700, fontFamily: T.fontHeadline }}>
-                  {repLogs.slice(-6).map((log, i) => (
-                    <li key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: log.status === 'Form Warning' || log.status === 'Insufficient Depth' ? T.secondary : T.primary }}>
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: log.status === 'Form Warning' || log.status === 'Insufficient Depth' ? T.secondary : T.primary }} />
-                      <span>Rep {log.repNumber}: {log.status}</span>
-                    </li>
+                <span style={{ fontFamily: T.fontHeadline, fontWeight: 900, textTransform: 'uppercase', fontSize: '0.82rem', display: 'block', marginBottom: '0.5rem' }}>
+                  Recent Repetitions Log
+                </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  {repLogs.slice(-5).reverse().map((log, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.35rem 0.6rem',
+                        background: log.status === 'Excellent' ? '#E6F4EA' : '#FFF0E6',
+                        border: '1.5px solid #1a1a1a',
+                        fontSize: '0.78rem',
+                        fontWeight: 800,
+                        fontFamily: T.fontHeadline,
+                      }}
+                    >
+                      <span>Rep #{log.repNumber}</span>
+                      <span style={{ color: log.status === 'Excellent' ? '#137333' : '#C5221F' }}>
+                        {log.status}
+                      </span>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </div>
             )}
+          </div>
+        </div>
 
-            {/* Save & Navigation Action Buttons */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem' }}>
-              {(completed || savedSuccess) && (
-                <div style={{
-                  padding: '0.65rem 1rem', background: '#E6F4EA', border: T.border2,
-                  color: '#137333', fontFamily: T.fontHeadline, fontWeight: 800,
-                  fontSize: '0.82rem', textTransform: 'uppercase', display: 'flex',
-                  alignItems: 'center', gap: '0.4rem', justifyContent: 'center',
-                }}>
-                  <CheckCircle2 size={16} />
-                  <span>Result Saved to Cloud & IndexedDB</span>
+
+        {/* Completion Modal / Summary Card */}
+        {completed && (
+          <div style={{
+            background: T.surfaceLowest,
+            border: T.border4,
+            boxShadow: T.shadow8,
+            padding: '2rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1.5rem',
+          }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{
+                    background: T.primaryContainer,
+                    border: T.border2,
+                    boxShadow: '2px 2px 0px 0px #1a1a1a',
+                    padding: '0.25rem 0.6rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 900,
+                    fontFamily: T.fontHeadline,
+                    textTransform: 'uppercase',
+                  }}>
+                    Session Complete
+                  </span>
+                  {savedSuccess && (
+                    <span style={{
+                      background: '#E6F4EA',
+                      color: '#137333',
+                      border: '1.5px solid #137333',
+                      padding: '0.2rem 0.5rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 800,
+                      fontFamily: T.fontHeadline,
+                    }}>
+                      &bull; Saved & Synced
+                    </span>
+                  )}
                 </div>
-              )}
+                <h2 style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '2rem', textTransform: 'uppercase', marginTop: '0.5rem' }}>
+                  {currentConfig.name} Assessment Result
+                </h2>
+              </div>
 
-              {completed && (
-                <button
-                  onClick={handleStopAssessment}
-                  style={{
-                    background: T.primaryContainer, color: T.primary,
-                    border: T.border3, boxShadow: T.shadow4, padding: '1rem',
-                    fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '1.1rem',
-                    textTransform: 'uppercase', letterSpacing: '0.04em', cursor: 'pointer',
-                    textAlign: 'center',
-                  }}
-                >
-                  {savedSuccess ? '✓ Assessment Saved' : 'Save Result to Profile'}
-                </button>
-              )}
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                <Link
-                  to="/progress"
-                  style={{
-                    background: T.surfaceLowest, color: T.primary, border: T.border2,
-                    boxShadow: '3px 3px 0px 0px #1a1a1a', padding: '0.75rem',
-                    fontFamily: T.fontHeadline, fontWeight: 800, fontSize: '0.85rem',
-                    textTransform: 'uppercase', textDecoration: 'none', textAlign: 'center',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem',
-                  }}
-                >
-                  <BarChart2 size={16} />
-                  <span>Analytics</span>
-                </Link>
-
-                <Link
-                  to="/dashboard"
-                  style={{
-                    background: T.surfaceLowest, color: T.primary, border: T.border2,
-                    boxShadow: '3px 3px 0px 0px #1a1a1a', padding: '0.75rem',
-                    fontFamily: T.fontHeadline, fontWeight: 800, fontSize: '0.85rem',
-                    textTransform: 'uppercase', textDecoration: 'none', textAlign: 'center',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem',
-                  }}
-                >
-                  <User size={16} />
-                  <span>Dashboard</span>
-                </Link>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem',
+                background: T.surfaceVariant,
+                border: T.border3,
+                boxShadow: T.shadow4,
+                padding: '0.75rem 1.5rem',
+              }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase' }}>Overall Grade</div>
+                  <div style={{ fontSize: '2rem', fontWeight: 900, fontFamily: T.fontHeadline, color: T.tertiary }}>{score.grade}</div>
+                </div>
+                <div style={{ width: '2px', height: '40px', background: '#1a1a1a' }} />
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase' }}>Total Score</div>
+                  <div style={{ fontSize: '2rem', fontWeight: 900, fontFamily: T.fontHeadline, color: T.primary }}>{score.totalScore}/100</div>
+                </div>
               </div>
             </div>
 
-          </section>
-        </main>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: '1rem',
+            }}>
+              <div style={{ background: T.surfaceVariant, padding: '1rem', border: T.border2 }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase' }}>Form Accuracy</span>
+                <div style={{ fontSize: '1.5rem', fontWeight: 900, fontFamily: T.fontHeadline, marginTop: '0.25rem' }}>{score.formAccuracy}%</div>
+              </div>
+              <div style={{ background: T.surfaceVariant, padding: '1rem', border: T.border2 }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase' }}>Depth / ROM Score</span>
+                <div style={{ fontSize: '1.5rem', fontWeight: 900, fontFamily: T.fontHeadline, marginTop: '0.25rem' }}>{score.depthScore}%</div>
+              </div>
+              <div style={{ background: T.surfaceVariant, padding: '1rem', border: T.border2 }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase' }}>Cadence Consistency</span>
+                <div style={{ fontSize: '1.5rem', fontWeight: 900, fontFamily: T.fontHeadline, marginTop: '0.25rem' }}>{score.cadenceScore}%</div>
+              </div>
+              <div style={{ background: T.surfaceVariant, padding: '1rem', border: T.border2 }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, fontFamily: T.fontHeadline, textTransform: 'uppercase' }}>Bilateral Symmetry</span>
+                <div style={{ fontSize: '1.5rem', fontWeight: 900, fontFamily: T.fontHeadline, marginTop: '0.25rem' }}>{score.symmetryScore}%</div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'flex-end', borderTop: '2px dashed #d6d1c9', paddingTop: '1.25rem' }}>
+              <button
+                onClick={() => { setCompleted(false); resetAllAnalyzers(); }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.65rem 1.25rem',
+                  background: T.surfaceVariant,
+                  border: T.border2,
+                  boxShadow: '2px 2px 0px 0px #1a1a1a',
+                  fontFamily: T.fontHeadline,
+                  fontWeight: 800,
+                  fontSize: '0.9rem',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                }}
+              >
+                <RotateCcw size={16} />
+                <span>Retest Drill</span>
+              </button>
+
+              <Link
+                to="/progress"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.65rem 1.5rem',
+                  background: T.primaryContainer,
+                  color: T.primary,
+                  border: T.border3,
+                  boxShadow: T.shadow4,
+                  fontFamily: T.fontHeadline,
+                  fontWeight: 900,
+                  fontSize: '0.9rem',
+                  textTransform: 'uppercase',
+                  textDecoration: 'none',
+                }}
+              >
+                <BarChart2 size={16} />
+                <span>View Full Analytics</span>
+              </Link>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
 };
-
-export default Assessment;
