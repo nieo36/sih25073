@@ -17,10 +17,12 @@ export interface LandmarkSample {
   landmarks: LandmarkPoint[];
 }
 
+import { ExerciseType } from '../config/exercises';
+
 export interface StoredAssessment {
   id: string; // Client UUID
   athleteId?: string;
-  exerciseType: 'squat' | 'pushup' | 'curl';
+  exerciseType: ExerciseType | string;
   date: string;
   totalScore: number;
   grade: string;
