@@ -57,9 +57,9 @@ async function getLeaderboardHandler(req, res) {
 
         if (hasAssessments) {
           const sumScore = assessments.reduce((acc, a) => acc + (a.totalScore || 0), 0);
-          const sumSym = assessments.reduce((acc, a) => acc + (a.symmetryScore || 90), 0);
-          const sumDepth = assessments.reduce((acc, a) => acc + (a.depthScore || 88), 0);
-          const sumCadence = assessments.reduce((acc, a) => acc + (a.cadenceScore || 85), 0);
+          const sumSym = assessments.reduce((acc, a) => acc + (a.symmetryScore || 85), 0);
+          const sumDepth = assessments.reduce((acc, a) => acc + (a.depthScore || 80), 0);
+          const sumCadence = assessments.reduce((acc, a) => acc + (a.cadenceScore || 80), 0);
 
           overallScore = Math.round(sumScore / assessments.length);
           avgSymmetry = Math.round(sumSym / assessments.length);
@@ -72,25 +72,31 @@ async function getLeaderboardHandler(req, res) {
             if (a.exerciseType === 'pushup') pushupReps += reps;
             if (a.exerciseType === 'squat') squatReps += reps;
           });
+        } else {
+          overallScore = 0;
+          avgSymmetry = 0;
+          avgDepth = 0;
+          avgCadence = 0;
+          validReps = 0;
         }
 
         const age = calculateAge(u.profile?.age);
         const athleteAgeGroup = getAgeGroup(age);
-        const athleteSport = u.profile?.primarySport || 'Athletics';
+        const athleteSport = u.profile?.primarySport || 'Basketball';
         const athleteState = u.profile?.state || 'Delhi';
-        const athleteDistrict = u.profile?.city || 'Central Delhi';
+        const athleteDistrict = u.profile?.city || '';
         const athleteGender = u.profile?.gender || 'Male';
 
-        const speed = Math.min(99, Math.round(avgCadence * 0.95 + 5));
-        const strength = Math.min(99, Math.round(overallScore * 0.92 + 8));
-        const agility = Math.min(99, Math.round(avgDepth * 0.94 + 6));
-        const endurance = Math.min(99, Math.round(overallScore * 0.75 + 18));
-        const power = Math.min(99, Math.round(overallScore * 0.96 + 4));
-        const sprint = Math.min(99, Math.round(avgCadence * 0.96 + 4));
+        const speed = hasAssessments ? Math.min(99, Math.round(avgCadence * 0.95 + 5)) : 0;
+        const strength = hasAssessments ? Math.min(99, Math.round(overallScore * 0.92 + 8)) : 0;
+        const agility = hasAssessments ? Math.min(99, Math.round(avgDepth * 0.94 + 6)) : 0;
+        const endurance = hasAssessments ? Math.min(99, Math.round(overallScore * 0.75 + 18)) : 0;
+        const power = hasAssessments ? Math.min(99, Math.round(overallScore * 0.96 + 4)) : 0;
+        const sprint = hasAssessments ? Math.min(99, Math.round(avgCadence * 0.96 + 4)) : 0;
 
-        const tier = getTier(overallScore);
-        const verificationStatus = u.isEmailVerified ? 'VERIFIED' : 'PENDING';
-        const percentile = Math.min(99.9, Number((70 + (overallScore - 60) * 0.74).toFixed(1)));
+        const tier = hasAssessments ? getTier(overallScore) : 'UNASSESSED';
+        const verificationStatus = u.isEmailVerified && hasAssessments ? 'VERIFIED' : 'PENDING';
+        const percentile = hasAssessments ? Math.min(99.9, Number((50 + (overallScore - 50) * 0.9).toFixed(1))) : 0;
 
         return {
           athleteId: u._id.toString(),
@@ -101,7 +107,7 @@ async function getLeaderboardHandler(req, res) {
           district: athleteDistrict,
           sport: athleteSport,
           overallScore,
-          validReps: validReps || 36,
+          validReps,
           tier,
           verificationStatus,
           percentile,
@@ -114,13 +120,16 @@ async function getLeaderboardHandler(req, res) {
             agility,
             endurance,
             power,
-            pushups: pushupReps || 36,
-            squats: squatReps || 42,
+            pushups: pushupReps,
+            squats: squatReps,
             sprint,
           },
         };
       })
     );
+
+    // Only rank assessed athletes on active leaderboard
+    const activeAthletes = athletesWithScores.filter(a => a.overallScore > 0);
 
     // Apply Filters
     let filtered = athletesWithScores.filter((a) => {
