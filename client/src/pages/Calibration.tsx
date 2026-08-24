@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import {
   Award,
   Camera as CameraIcon,
@@ -86,9 +86,12 @@ const CALIBRATION_STEPS: CalibrationStep[] = [
 export const Calibration: React.FC = () => {
   const { user, updateUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isFirstRegistration = (location.state as any)?.isFirstRegistration;
 
   const [stepIndex, setStepIndex] = useState<number>(0);
   const currentStep = CALIBRATION_STEPS[stepIndex];
+  const stepIndexRef = useRef<number>(stepIndex);
 
   // Camera & Pipeline State
   const [cameraActive, setCameraActive] = useState<boolean>(false);
@@ -129,6 +132,10 @@ export const Calibration: React.FC = () => {
   useEffect(() => {
     isAssessingRef.current = isAssessing;
   }, [isAssessing]);
+
+  useEffect(() => {
+    stepIndexRef.current = stepIndex;
+  }, [stepIndex]);
 
   // Clean up on unmount
   useEffect(() => {
@@ -227,7 +234,7 @@ export const Calibration: React.FC = () => {
 
       // 4. Live Analyzer Processing if assessing
       if (isAssessingRef.current) {
-        const step = CALIBRATION_STEPS[stepIndex];
+        const step = CALIBRATION_STEPS[stepIndexRef.current];
         if (step.exercise === 'pushup') {
           const res = pushupAnalyzerRef.current.process(smoothed);
           setRepCount(res.repCount);
@@ -246,7 +253,7 @@ export const Calibration: React.FC = () => {
       setIsProperlyFramed(false);
       setFramingStatus('No athlete detected in frame.');
     }
-  }, [stepIndex]);
+  }, []);
 
   const startTest = () => {
     // Reset analyzers for this step
@@ -316,14 +323,14 @@ export const Calibration: React.FC = () => {
       // Save each assessment to IndexedDB
       for (const res of allResults) {
         const stored = {
-          id: `calib-${Date.now()}-${res.exercise}`,
+          id: `calib-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-${res.exercise}`,
           exerciseType: res.exercise,
           date: new Date().toISOString(),
           totalScore: res.score,
-          grade: 'A',
+          grade: res.score >= 85 ? 'A' : res.score >= 70 ? 'B' : 'C',
           repsCompleted: res.reps,
           validReps: res.reps,
-          durationSeconds: currentStep.duration,
+          durationSeconds: 30,
           caloriesBurned: Math.round(res.reps * 1.5),
           symmetryScore: 85,
           depthScore: 80,
@@ -347,9 +354,14 @@ export const Calibration: React.FC = () => {
           profile: {
             ...user.profile,
             score: overallBaselineScore,
+            isCalibrated: true,
           },
         });
       }
+
+      // Notify window of storage update so dashboard refreshes automatically
+      window.dispatchEvent(new Event('storage'));
+      window.dispatchEvent(new CustomEvent('assessment-saved'));
     } catch (err) {
       console.warn('Failed saving calibration baseline:', err);
     }
@@ -408,6 +420,33 @@ export const Calibration: React.FC = () => {
             Skip to Dashboard &rarr;
           </Link>
         </header>
+
+        {isFirstRegistration && (
+          <div
+            style={{
+              background: T.primaryContainer,
+              border: T.border3,
+              boxShadow: T.shadow4,
+              padding: '1rem 1.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.85rem',
+              fontFamily: T.fontHeadline,
+              fontSize: '0.9rem',
+              color: T.primary,
+            }}
+          >
+            <Sparkles size={24} color={T.primary} style={{ flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: 900, textTransform: 'uppercase', fontSize: '0.95rem' }}>
+                Welcome to KreedAI Athlete Onboarding!
+              </div>
+              <div style={{ fontFamily: T.fontBody, fontSize: '0.88rem', marginTop: '0.15rem', color: T.onSurface }}>
+                Complete this initial MediaPipe AI calibration to benchmark your joint movement and display your baseline scores on your dashboard.
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Step Progress Tracker */}
         {!isComplete && (

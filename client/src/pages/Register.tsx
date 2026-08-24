@@ -249,8 +249,8 @@ export const Register: React.FC = () => {
             },
           });
         }
-        // Direct transition to Athlete Calibration onboarding
-        navigate('/calibration');
+        // Direct transition to Athlete Calibration onboarding with first registration flag
+        navigate('/calibration', { state: { isFirstRegistration: true } });
       } catch (err: any) {
         const msg = err?.message || 'Registration failed';
         if (msg.toLowerCase().includes('already in use') || msg.toLowerCase().includes('duplicate')) {

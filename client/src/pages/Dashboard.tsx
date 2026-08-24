@@ -52,14 +52,26 @@ export const Dashboard: React.FC = () => {
   const [serverStats, setServerStats] = useState<AthleteStatsResponse | null>(null);
 
   useEffect(() => {
-    // Load both local indexedDB and live backend stats
-    OfflineStorage.getAllAssessments().then((stored) => {
-      if (Array.isArray(stored)) setAssessments(stored);
-    }).catch(() => {});
+    const loadStats = () => {
+      // Load both local indexedDB and live backend stats
+      OfflineStorage.getAllAssessments().then((stored) => {
+        if (Array.isArray(stored)) setAssessments(stored);
+      }).catch(() => {});
 
-    ApiService.getAthleteStats().then((data) => {
-      if (data) setServerStats(data);
-    }).catch(() => {});
+      ApiService.getAthleteStats().then((data) => {
+        if (data) setServerStats(data);
+      }).catch(() => {});
+    };
+
+    loadStats();
+
+    window.addEventListener('storage', loadStats);
+    window.addEventListener('assessment-saved', loadStats);
+
+    return () => {
+      window.removeEventListener('storage', loadStats);
+      window.removeEventListener('assessment-saved', loadStats);
+    };
   }, [user]);
 
   const athleteName = user?.name || 'Athlete';
