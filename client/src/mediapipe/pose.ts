@@ -100,25 +100,25 @@ export function checkFramingAndVisibility(
     const lm = landmarks[jointIndex];
     if (!lm) continue;
 
-    const vis = lm.visibility ?? 0;
+    const vis = lm.visibility ?? 1;
     totalConfidence += vis;
 
-    if (vis >= 0.6) {
+    if (vis >= 0.3) {
       visibleCount++;
     }
 
-    if (lm.x < 0.03 || lm.x > 0.97 || lm.y < 0.03 || lm.y > 0.97) {
+    if (lm.x < 0.01 || lm.x > 0.99 || lm.y < 0.01 || lm.y > 0.99) {
       outOfBounds = true;
     }
   }
 
   const avgConfidence = requiredJoints.length > 0 ? totalConfidence / requiredJoints.length : 0;
-  const isSufficientlyVisible = visibleCount >= Math.ceil(requiredJoints.length * 0.75);
+  const isSufficientlyVisible = visibleCount >= Math.ceil(requiredJoints.length * 0.4);
 
   if (outOfBounds) {
     return {
       isProperlyFramed: false,
-      message: 'Body too close to edge. Step back and center yourself.',
+      message: 'Body near edge. Step back and center yourself.',
       visibleJointCount: visibleCount,
       confidence: avgConfidence,
     };
@@ -127,7 +127,7 @@ export function checkFramingAndVisibility(
   if (!isSufficientlyVisible) {
     return {
       isProperlyFramed: false,
-      message: 'Ensure full body from shoulders to feet is visible.',
+      message: 'Ensure upper/lower body is in camera frame.',
       visibleJointCount: visibleCount,
       confidence: avgConfidence,
     };

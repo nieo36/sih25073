@@ -105,13 +105,17 @@ export const POSE_CONNECTIONS: LandmarkConnection[] = [
 export function areLandmarksVisible(
   landmarks: NormalizedLandmark[],
   indices: PoseLandmark[],
-  threshold = 0.5
+  threshold = 0.25
 ): boolean {
   if (!landmarks || landmarks.length === 0) return false;
-  return indices.every((idx) => {
+  let visibleCount = 0;
+  for (const idx of indices) {
     const point = landmarks[idx];
-    return point && (point.visibility === undefined || point.visibility >= threshold);
-  });
+    if (point && (point.visibility === undefined || point.visibility >= threshold)) {
+      visibleCount++;
+    }
+  }
+  return visibleCount >= Math.max(1, Math.ceil(indices.length * 0.4));
 }
 
 /**

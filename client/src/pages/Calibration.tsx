@@ -125,6 +125,8 @@ export const Calibration: React.FC = () => {
   const cameraActiveRef = useRef<boolean>(false);
   const animationFrameIdRef = useRef<number | null>(null);
   const timerRef = useRef<any>(null);
+  const repCountRef = useRef<number>(0);
+  const formScoreRef = useRef<number>(0);
 
   // Analyzers
   const pushupAnalyzerRef = useRef(new PushupAnalyzer());
@@ -254,16 +256,28 @@ export const Calibration: React.FC = () => {
         const step = CALIBRATION_STEPS[stepIndexRef.current];
         if (step.exercise === 'pushup') {
           const res = pushupAnalyzerRef.current.process(smoothed);
-          setRepCount(res.repCount);
-          setFormScore(Math.round(res.formScore || 80));
+          const rc = res.repCount || 0;
+          const fs = Math.round(res.formScore || 80);
+          repCountRef.current = rc;
+          formScoreRef.current = fs;
+          setRepCount(rc);
+          setFormScore(fs);
         } else if (step.exercise === 'squat') {
           const res = squatAnalyzerRef.current.process(smoothed);
-          setRepCount(res.repCount);
-          setFormScore(Math.round(res.formScore || 80));
+          const rc = res.repCount || 0;
+          const fs = Math.round(res.formScore || 80);
+          repCountRef.current = rc;
+          formScoreRef.current = fs;
+          setRepCount(rc);
+          setFormScore(fs);
         } else if (step.exercise === 'vertical_jump') {
           const res = jumpAnalyzerRef.current.process(smoothed);
-          setRepCount(res.repCount || 0);
-          setFormScore(Math.round(res.formScore || 82));
+          const rc = res.repCount || 0;
+          const fs = Math.round(res.formScore || 82);
+          repCountRef.current = rc;
+          formScoreRef.current = fs;
+          setRepCount(rc);
+          setFormScore(fs);
         }
       }
     } else {
@@ -279,6 +293,8 @@ export const Calibration: React.FC = () => {
     if (currentStep.exercise === 'squat') squatAnalyzerRef.current.reset();
     if (currentStep.exercise === 'vertical_jump') jumpAnalyzerRef.current.reset();
 
+    repCountRef.current = 0;
+    formScoreRef.current = 0;
     setRepCount(0);
     setFormScore(0);
     setTimeLeft(currentStep.duration);
@@ -300,10 +316,12 @@ export const Calibration: React.FC = () => {
   const finishStep = () => {
     setIsAssessing(false);
 
-    // Calculate score based on actual reps and form
-    const currentReps = repCount;
+    // Calculate score based on actual recorded reps and form score
+    const currentReps = repCountRef.current;
+    const currentFormScore = formScoreRef.current || 80;
+
     const computedScore = Math.min(99, Math.max(50, Math.round(
-      (currentReps >= 5 ? 75 : 60) + Math.min(20, currentReps * 2.5) + (formScore ? (formScore - 70) * 0.2 : 0)
+      (currentReps >= 5 ? 75 : 60) + Math.min(20, currentReps * 2.5) + (currentFormScore ? (currentFormScore - 70) * 0.2 : 0)
     )));
 
     const result = {
@@ -314,15 +332,18 @@ export const Calibration: React.FC = () => {
       score: computedScore,
       metrics: {
         reps: currentReps,
-        form: formScore || 80,
+        form: currentFormScore,
       },
     };
 
     setCollectedResults((prev) => [...prev, result]);
 
     if (stepIndex + 1 < CALIBRATION_STEPS.length) {
-      setStepIndex(stepIndex + 1);
-      setTimeLeft(CALIBRATION_STEPS[stepIndex + 1].duration);
+      const nextIdx = stepIndex + 1;
+      setStepIndex(nextIdx);
+      setTimeLeft(CALIBRATION_STEPS[nextIdx].duration);
+      repCountRef.current = 0;
+      formScoreRef.current = 0;
       setRepCount(0);
       setFormScore(0);
     } else {
@@ -778,6 +799,23 @@ export const Calibration: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Form Accuracy */}
+                  <div
+                    style={{
+                      background: 'rgba(26,26,26,0.85)',
+                      border: '2px solid #0055ff',
+                      padding: '0.5rem 1rem',
+                      color: '#ffffff',
+                    }}
+                  >
+                    <div style={{ fontFamily: T.fontHeadline, fontSize: '0.65rem', fontWeight: 800, color: '#d6e3ff', textTransform: 'uppercase' }}>
+                      FORM ACCURACY
+                    </div>
+                    <div style={{ fontFamily: T.fontHeadline, fontSize: '2rem', fontWeight: 900, lineHeight: 1 }}>
+                      {formScore}%
+                    </div>
+                  </div>
+
                   {/* Timer */}
                   <div
                     style={{
@@ -810,13 +848,13 @@ export const Calibration: React.FC = () => {
               {cameraActive && !isAssessing && (
                 <button
                   onClick={startTest}
-                  disabled={!isProperlyFramed}
+                  disabled={!cameraActive}
                   style={{
                     flex: 1,
                     minWidth: '220px',
-                    background: isProperlyFramed ? T.primaryContainer : '#d6d1c9',
+                    background: T.primaryContainer,
                     border: T.border4,
-                    boxShadow: isProperlyFramed ? T.shadow6 : 'none',
+                    boxShadow: T.shadow6,
                     padding: '1rem',
                     fontFamily: T.fontHeadline,
                     fontWeight: 900,
