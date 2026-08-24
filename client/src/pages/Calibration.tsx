@@ -122,6 +122,8 @@ export const Calibration: React.FC = () => {
   const poseDetectorRef = useRef<any>(null);
   const prevLandmarksRef = useRef<any>(null);
   const isAssessingRef = useRef<boolean>(false);
+  const cameraActiveRef = useRef<boolean>(false);
+  const animationFrameIdRef = useRef<number | null>(null);
   const timerRef = useRef<any>(null);
 
   // Analyzers
@@ -146,6 +148,11 @@ export const Calibration: React.FC = () => {
   }, []);
 
   const stopCamera = () => {
+    cameraActiveRef.current = false;
+    if (animationFrameIdRef.current) {
+      cancelAnimationFrame(animationFrameIdRef.current);
+      animationFrameIdRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -176,29 +183,31 @@ export const Calibration: React.FC = () => {
 
       if (!poseDetectorRef.current) {
         poseDetectorRef.current = createPoseDetector(handlePoseResults);
+        await poseDetectorRef.current.initialize();
       }
 
+      cameraActiveRef.current = true;
       setCameraActive(true);
-      requestAnimationFrame(processFrame);
+
+      const sendFrame = async () => {
+        if (videoRef.current && videoRef.current.readyState >= 2 && poseDetectorRef.current) {
+          try {
+            await poseDetectorRef.current.send({ image: videoRef.current });
+          } catch (e) {
+            // frame processing catch
+          }
+        }
+        if (streamRef.current && cameraActiveRef.current) {
+          animationFrameIdRef.current = requestAnimationFrame(sendFrame);
+        }
+      };
+
+      animationFrameIdRef.current = requestAnimationFrame(sendFrame);
     } catch (err: any) {
       console.error('Calibration camera error:', err);
       setFramingStatus('Unable to access camera. Please allow camera permissions.');
     } finally {
       setCameraLoading(false);
-    }
-  };
-
-  const processFrame = async () => {
-    if (!videoRef.current || !cameraActive) return;
-    if (videoRef.current.readyState >= 2 && poseDetectorRef.current) {
-      try {
-        await poseDetectorRef.current.send({ image: videoRef.current });
-      } catch (e) {
-        // frame processing catch
-      }
-    }
-    if (streamRef.current) {
-      requestAnimationFrame(processFrame);
     }
   };
 
@@ -209,8 +218,16 @@ export const Calibration: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    canvas.width = results.image.width || 640;
-    canvas.height = results.image.height || 480;
+    const video = videoRef.current;
+    const videoWidth = (video && video.videoWidth > 0) ? video.videoWidth : (results.image.width || 640);
+    const videoHeight = (video && video.videoHeight > 0) ? video.videoHeight : (results.image.height || 480);
+
+    if (canvas.width !== videoWidth || canvas.height !== videoHeight) {
+      canvas.width = videoWidth;
+      canvas.height = videoHeight;
+    }
+
+    ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     if (results.poseLandmarks && results.poseLandmarks.length > 0) {
@@ -227,8 +244,8 @@ export const Calibration: React.FC = () => {
       drawPoseSkeleton(ctx, smoothed, canvas.width, canvas.height, {
         pointColor: '#ffcc00',
         lineColor: 'rgba(0, 85, 255, 0.8)',
-        pointRadius: 4,
-        lineWidth: 3,
+        pointRadius: 6,
+        lineWidth: 4,
         minConfidence: 0.5,
       });
 
@@ -253,6 +270,7 @@ export const Calibration: React.FC = () => {
       setIsProperlyFramed(false);
       setFramingStatus('No athlete detected in frame.');
     }
+    ctx.restore();
   }, []);
 
   const startTest = () => {
