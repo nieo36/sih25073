@@ -134,10 +134,9 @@ export const Passport: React.FC = () => {
     showToast('Generating official high-resolution PDF certificate...');
 
     try {
-      const success = await exportPassportPdf('passport-printable-card', passport.athleteName);
-      if (success) {
-        showToast(`Downloaded KreedAI_Sports_Passport_${passport.athleteName.replace(/\s+/g, '_')}.pdf`);
-      }
+      const el = passportCardRef.current || document.getElementById('passport-printable-card') || document.body;
+      await exportPassportPdf(el, passport.athleteName);
+      showToast(`Downloaded KreedAI_Sports_Passport_${passport.athleteName.replace(/\s+/g, '_')}.pdf`);
     } catch {
       showToast('Opening print dialog for certificate export...');
       window.print();
@@ -827,55 +826,96 @@ export const Passport: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {passport.verifiedAssessments.map((a) => (
+                {passport.verifiedAssessments.length === 0 ? (
                   <div
-                    key={a.id}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '0.65rem 0.85rem',
                       background: T.surfaceVariant,
                       border: T.border2,
-                      boxShadow: T.shadow2,
-                      fontFamily: T.fontBody,
-                      fontSize: '0.82rem',
-                      flexWrap: 'wrap',
-                      gap: '0.5rem',
+                      padding: '1.5rem',
+                      textAlign: 'center',
+                      color: T.onSurfaceVariant,
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                      <CheckCircle2 size={16} color={T.green} />
-                      <div>
-                        <div style={{ fontFamily: T.fontHeadline, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.85rem' }}>
-                          {a.type}
-                        </div>
-                        <div style={{ fontSize: '0.7rem', color: T.onSurfaceVariant, fontWeight: 500 }}>
-                          Date: {a.date} · {a.reps} Valid Reps Completed
-                        </div>
-                      </div>
+                    <div style={{ fontFamily: T.fontHeadline, fontWeight: 800, fontSize: '0.95rem', textTransform: 'uppercase', color: T.primary }}>
+                      No Verified Assessments Logged Yet
                     </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                      <div style={{ textAlign: 'right' }}>
-                        <span style={{ fontSize: '0.65rem', color: T.onSurfaceVariant, fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>
-                          Symmetry
-                        </span>
-                        <span style={{ fontFamily: T.fontHeadline, fontWeight: 800, color: T.green }}>
-                          {a.symmetry}%
-                        </span>
-                      </div>
-                      <div style={{ textAlign: 'right', minWidth: '48px' }}>
-                        <span style={{ fontSize: '0.65rem', color: T.onSurfaceVariant, fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>
-                          Form Score
-                        </span>
-                        <span style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '1.1rem', color: T.primary }}>
-                          {a.score}
-                        </span>
-                      </div>
-                    </div>
+                    <p style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                      Complete your baseline calibration or launch an assessment to generate your verified biometric credentials.
+                    </p>
+                    <Link
+                      to="/calibration"
+                      className="no-print"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        marginTop: '0.75rem',
+                        background: T.primaryContainer,
+                        border: T.border2,
+                        padding: '0.5rem 1rem',
+                        fontFamily: T.fontHeadline,
+                        fontWeight: 900,
+                        fontSize: '0.8rem',
+                        textTransform: 'uppercase',
+                        color: T.primary,
+                        textDecoration: 'none',
+                        boxShadow: '2px 2px 0px #1a1a1a',
+                      }}
+                    >
+                      Start Calibration &rarr;
+                    </Link>
                   </div>
-                ))}
+                ) : (
+                  passport.verifiedAssessments.map((a) => (
+                    <div
+                      key={a.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.65rem 0.85rem',
+                        background: T.surfaceVariant,
+                        border: T.border2,
+                        boxShadow: T.shadow2,
+                        fontFamily: T.fontBody,
+                        fontSize: '0.82rem',
+                        flexWrap: 'wrap',
+                        gap: '0.5rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                        <CheckCircle2 size={16} color={T.green} />
+                        <div>
+                          <div style={{ fontFamily: T.fontHeadline, fontWeight: 700, textTransform: 'uppercase', fontSize: '0.85rem' }}>
+                            {a.type}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: T.onSurfaceVariant, fontWeight: 500 }}>
+                            Date: {a.date} · {a.reps} Valid Reps Completed
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '0.65rem', color: T.onSurfaceVariant, fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>
+                            Symmetry
+                          </span>
+                          <span style={{ fontFamily: T.fontHeadline, fontWeight: 800, color: T.green }}>
+                            {a.symmetry}%
+                          </span>
+                        </div>
+                        <div style={{ textAlign: 'right', minWidth: '48px' }}>
+                          <span style={{ fontSize: '0.65rem', color: T.onSurfaceVariant, fontWeight: 700, textTransform: 'uppercase', display: 'block' }}>
+                            Form Score
+                          </span>
+                          <span style={{ fontFamily: T.fontHeadline, fontWeight: 900, fontSize: '1.1rem', color: T.primary }}>
+                            {a.score}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 

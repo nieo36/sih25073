@@ -1,7 +1,7 @@
 /**
  * PassportService
  * ---------------
- * Manages Sports Passport data synthesis from authenticated profile & assessments,
+ * Manages Sports Passport data synthesis from authenticated profile & genuine assessments,
  * cryptographic verification hashes, and client-side PDF generation.
  */
 
@@ -19,6 +19,8 @@ export interface BiomechanicalScores {
   overallScore: number;
 }
 
+export type PassportVerificationStatus = 'NOT VERIFIED' | 'SELF-REPORTED' | 'AI ANALYZED' | 'VERIFIED';
+
 export interface PassportData {
   passportId: string;
   athleteName: string;
@@ -32,7 +34,7 @@ export interface PassportData {
   athleteTier: string;
   eloRating: number;
   organization: string;
-  verificationStatus: 'VERIFIED' | 'PENDING' | 'UNVERIFIED';
+  verificationStatus: PassportVerificationStatus;
   verificationHash: string;
   issuedDate: string;
   validThru: string;
@@ -56,10 +58,10 @@ export interface PassportData {
 }
 
 /**
- * Generate a deterministic or realistic verification hash
+ * Generate a deterministic verification hash from real session data
  */
 export function generateVerificationHash(athleteId: string, timestamp: number): string {
-  const seed = `${athleteId}-${timestamp}-SAI-KREEDAI-2026`;
+  const seed = `${athleteId}-${timestamp}-KREEDAI-DATA`;
   let hash = 0;
   for (let i = 0; i < seed.length; i++) {
     const char = seed.charCodeAt(i);
@@ -67,23 +69,23 @@ export function generateVerificationHash(athleteId: string, timestamp: number): 
     hash |= 0;
   }
   const hex = Math.abs(hash).toString(16).padStart(8, '0');
-  return `8f9b${hex.slice(0, 4)}e21a${hex.slice(4, 8)}`.toLowerCase();
+  return `krd${hex.slice(0, 4)}ai${hex.slice(4, 8)}`.toLowerCase();
 }
 
 /**
- * Synthesize complete passport data using available user profile & assessments
+ * Synthesize genuine passport data using available user profile & assessments
  */
 export function buildPassportData(
   user: AuthUser | null,
   assessments: StoredAssessment[] = []
 ): PassportData {
-  const athleteName = user?.name || 'Aarav Sharma';
-  const athleteId = user?.id || 'ath-001';
+  const athleteName = user?.name || 'Athlete';
+  const athleteId = user?.id || 'ath-new';
   const profile = user?.profile || {};
 
-  const sport = profile.primarySport || 'Athletics & Track';
-  const state = profile.state || 'Delhi';
-  const district = profile.city || 'South Delhi';
+  const sport = profile.primarySport || 'Basketball';
+  const state = profile.state || 'National';
+  const district = profile.city || '';
   const age = profile.age || 19;
   const gender = profile.gender || 'Male';
 
@@ -96,99 +98,96 @@ export function buildPassportData(
     else ageCategory = 'Senior Open';
   }
 
-  // Calculate scores from real assessments if available
-  let lowerPower = 90;
-  let upperPower = 86;
-  let mobilityRom = 94;
-  let bilateralSymmetry = 95;
-  let overallScore = 88.4;
+  const hasData = assessments.length > 0;
 
-  if (assessments.length > 0) {
-    const squats = assessments.filter((a) => a.exerciseType === 'squat');
-    const pushups = assessments.filter((a) => a.exerciseType === 'pushup');
+  // Calculate scores from genuine assessments only
+  let lowerPower = 0;
+  let upperPower = 0;
+  let mobilityRom = 0;
+  let bilateralSymmetry = 0;
+  let overallScore = 0;
+
+  if (hasData) {
+    const squats = assessments.filter((a) => a.exerciseType?.includes('squat'));
+    const pushups = assessments.filter((a) => a.exerciseType?.includes('pushup'));
 
     if (squats.length > 0) {
       const avgSquat = squats.reduce((acc, s) => acc + (s.totalScore || 0), 0) / squats.length;
-      lowerPower = Math.min(99, Math.round(avgSquat * 0.95 + 5));
+      lowerPower = Math.min(99, Math.round(avgSquat));
+    } else {
+      lowerPower = Math.round(assessments.reduce((acc, a) => acc + (a.totalScore || 0), 0) / assessments.length);
     }
+
     if (pushups.length > 0) {
       const avgPushup = pushups.reduce((acc, p) => acc + (p.totalScore || 0), 0) / pushups.length;
-      upperPower = Math.min(99, Math.round(avgPushup * 0.92 + 8));
+      upperPower = Math.min(99, Math.round(avgPushup));
+    } else {
+      upperPower = Math.round(assessments.reduce((acc, a) => acc + (a.totalScore || 0), 0) / assessments.length);
     }
 
-    const avgSym = assessments.reduce((acc, a) => acc + (a.symmetryScore || 90), 0) / assessments.length;
+    const avgSym = assessments.reduce((acc, a) => acc + (a.symmetryScore || 85), 0) / assessments.length;
     bilateralSymmetry = Math.min(99, Math.round(avgSym));
 
-    const avgDepth = assessments.reduce((acc, a) => acc + (a.depthScore || 88), 0) / assessments.length;
-    mobilityRom = Math.min(99, Math.round(avgDepth * 0.96 + 4));
+    const avgDepth = assessments.reduce((acc, a) => acc + (a.depthScore || a.formAccuracy || 80), 0) / assessments.length;
+    mobilityRom = Math.min(99, Math.round(avgDepth));
 
     const avgTotal = assessments.reduce((acc, a) => acc + (a.totalScore || 0), 0) / assessments.length;
-    overallScore = Number((avgTotal || 88.4).toFixed(1));
+    overallScore = Number(avgTotal.toFixed(1));
   }
 
-  let overallGrade = 'A+';
-  if (overallScore >= 92) overallGrade = 'A+ (Elite)';
-  else if (overallScore >= 85) overallGrade = 'A (National Tier)';
-  else if (overallScore >= 78) overallGrade = 'B+ (State Tier)';
-  else overallGrade = 'B (District Tier)';
+  let overallGrade = 'UNASSESSED';
+  if (hasData) {
+    if (overallScore >= 92) overallGrade = 'A+ (Elite)';
+    else if (overallScore >= 85) overallGrade = 'A (National)';
+    else if (overallScore >= 75) overallGrade = 'B+ (State)';
+    else overallGrade = 'B (District)';
+  }
+
+  // Real verification status
+  let verificationStatus: PassportVerificationStatus = 'NOT VERIFIED';
+  if (hasData) {
+    verificationStatus = user?.isEmailVerified ? 'VERIFIED' : 'AI ANALYZED';
+  }
 
   // Calculate ELO Rating & Tier
-  const eloRating = Math.round(1500 + overallScore * 4.2);
-  let athleteTier = 'Platinum';
-  if (overallScore >= 94) athleteTier = 'Olympian';
-  else if (overallScore >= 90) athleteTier = 'Diamond';
-  else if (overallScore >= 82) athleteTier = 'Platinum';
-  else if (overallScore >= 74) athleteTier = 'Gold';
-  else athleteTier = 'Silver';
+  const eloRating = hasData ? Math.round(1200 + overallScore * 6) : 0;
+  let athleteTier = 'UNASSESSED';
+  if (hasData) {
+    if (overallScore >= 94) athleteTier = 'Olympian';
+    else if (overallScore >= 90) athleteTier = 'Diamond';
+    else if (overallScore >= 82) athleteTier = 'Platinum';
+    else if (overallScore >= 74) athleteTier = 'Gold';
+    else athleteTier = 'Silver';
+  }
 
-  // Format verified assessments list
-  const verifiedAssessments =
-    assessments.length > 0
-      ? assessments.slice(0, 4).map((a, idx) => ({
-          id: a.id || `ass-${idx}`,
-          type: a.exerciseType === 'squat' ? 'Deep Biomechanical Squat' : 'Standard Cadence Push-Up',
-          date: new Date(a.date || Date.now()).toLocaleDateString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-          }),
-          reps: a.validReps || a.repsCompleted || 32,
-          score: a.totalScore || 88,
-          symmetry: a.symmetryScore || 94,
-          verified: true,
-        }))
-      : [
-          {
-            id: 'ass-1',
-            type: 'Deep Biomechanical Squat',
-            date: '18 Aug 2026',
-            reps: 42,
-            score: 92,
-            symmetry: 96,
-            verified: true,
-          },
-          {
-            id: 'ass-2',
-            type: 'Standard Cadence Push-Up',
-            date: '12 Aug 2026',
-            reps: 36,
-            score: 87,
-            symmetry: 94,
-            verified: true,
-          },
-          {
-            id: 'ass-3',
-            type: 'Kinematic Sprint Acceleration',
-            date: '04 Aug 2026',
-            reps: 1,
-            score: 91,
-            symmetry: 95,
-            verified: true,
-          },
-        ];
+  // Real assessment records only
+  const verifiedAssessments = assessments.map((a, idx) => ({
+    id: a.id || `ass-${idx}`,
+    type: a.exerciseType.replace(/_/g, ' ').toUpperCase(),
+    date: new Date(a.createdAt || (a.date ? Date.parse(a.date) : Date.now())).toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }),
+    reps: a.validReps || a.repsCompleted || 0,
+    score: a.totalScore || 0,
+    symmetry: a.symmetryScore || 85,
+    verified: true,
+  }));
 
-  const hash = generateVerificationHash(athleteId, 1724240000000);
-  const passportNumber = `IND-2026-${athleteId.replace(/\D/g, '').padStart(4, '8849').slice(0, 4)}`;
+  const achievements = hasData && overallScore >= 80 ? [
+    {
+      title: 'Baseline Calibrated',
+      issuer: 'KreedAI Biomechanics Engine',
+      date: new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }),
+      badgeColor: '#ffcc00',
+    },
+  ] : [];
+
+  const rawSuffix = athleteId.replace(/\D/g, '');
+  const idDigits = (rawSuffix.length >= 4 ? rawSuffix.slice(-4) : (rawSuffix + '1001').slice(0, 4));
+  const passportNumber = `IND-2026-${idDigits}`;
+  const hash = hasData ? generateVerificationHash(athleteId, Date.now()) : 'NOT_CALIBRATED';
 
   return {
     passportId: passportNumber,
@@ -200,13 +199,13 @@ export function buildPassportData(
     age,
     gender,
     ageCategory,
-    athleteTier: `${athleteTier} (${eloRating.toLocaleString()} ELO)`,
+    athleteTier,
     eloRating,
-    organization: profile.organization || 'Sports Authority of India (SAI)',
-    verificationStatus: 'VERIFIED',
+    organization: profile.organization || 'KreedAI Sports Network',
+    verificationStatus,
     verificationHash: hash,
-    issuedDate: '15 Aug 2026',
-    validThru: '15 Aug 2027',
+    issuedDate: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+    validThru: '31 Dec 2027',
     scores: {
       lowerPower,
       upperPower,
@@ -216,83 +215,36 @@ export function buildPassportData(
       overallScore,
     },
     verifiedAssessments,
-    achievements: [
-      {
-        title: 'SAI National Benchmark Tier 1',
-        issuer: 'Sports Authority of India',
-        date: 'Aug 2026',
-        badgeColor: '#ffcc00',
-      },
-      {
-        title: 'Elite Biomechanical Symmetry >95%',
-        issuer: 'KreedAI CV Engine',
-        date: 'Jul 2026',
-        badgeColor: '#0055ff',
-      },
-      {
-        title: 'Verified Anti-Cheat Depth Authenticated',
-        issuer: 'MediaPipe Kinematic Sensor',
-        date: 'Jul 2026',
-        badgeColor: '#16a34a',
-      },
-    ],
+    achievements,
     avatar: profile.profilePhoto || profile.avatar || user?.profilePhoto || user?.avatar,
   };
 }
 
 /**
- * Client-Side PDF Generator for Sports Passport Certificate
+ * Export Passport DOM to high-res PDF
  */
-export async function exportPassportPdf(elementId: string, athleteName: string): Promise<boolean> {
-  const element = document.getElementById(elementId);
-  if (!element) {
-    console.error(`Element #${elementId} not found for PDF export`);
-    return false;
-  }
+export async function exportPassportPdf(
+  element: HTMLElement,
+  athleteName: string
+): Promise<void> {
+  const canvas = await html2canvas(element, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: '#f5f0e8',
+    logging: false,
+  });
 
-  try {
-    // Generate high-resolution canvas snapshot
-    const canvas = await html2canvas(element, {
-      scale: 2.5,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#f5f0e8',
-      windowWidth: element.scrollWidth,
-    });
+  const imgData = canvas.toDataURL('image/png');
+  const pdf = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
 
-    const imgData = canvas.toDataURL('image/jpeg', 0.95);
-    const pdf = new jsPDF({
-      orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-      unit: 'mm',
-      format: 'a4',
-    });
+  const pdfWidth = pdf.internal.pageSize.getWidth();
+  const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 8;
-    const maxWidth = pageWidth - margin * 2;
-    const maxHeight = pageHeight - margin * 2;
-
-    let finalWidth = maxWidth;
-    let finalHeight = (canvas.height * finalWidth) / canvas.width;
-
-    if (finalHeight > maxHeight) {
-      finalHeight = maxHeight;
-      finalWidth = (canvas.width * finalHeight) / canvas.height;
-    }
-
-    const posX = (pageWidth - finalWidth) / 2;
-    const posY = (pageHeight - finalHeight) / 2;
-
-    pdf.addImage(imgData, 'JPEG', posX, posY, finalWidth, finalHeight, undefined, 'FAST');
-
-    const cleanName = athleteName.trim().replace(/[^a-zA-Z0-9_-]/g, '_') || 'Athlete';
-    pdf.save(`KreedAI_Sports_Passport_${cleanName}.pdf`);
-    return true;
-  } catch (error) {
-    console.error('Error generating PDF passport:', error);
-    // Fallback: trigger print dialog if html2canvas fails
-    window.print();
-    return false;
-  }
+  pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+  const cleanName = athleteName.replace(/\s+/g, '_').toLowerCase();
+  pdf.save(`KreedAI_Sports_Passport_${cleanName}.pdf`);
 }

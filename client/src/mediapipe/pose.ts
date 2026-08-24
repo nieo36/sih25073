@@ -8,6 +8,7 @@ export interface PoseDetectorConfig extends Options {}
 
 /**
  * Creates and initializes a MediaPipe Pose detector instance with WASM dependencies
+ * Tuned with higher confidence thresholds (0.65) to eliminate phantom landmarks.
  */
 export function createPoseDetector(
   onResults: (results: Results) => void,
@@ -20,13 +21,124 @@ export function createPoseDetector(
   pose.setOptions({
     modelComplexity: 1,
     smoothLandmarks: true,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5,
+    minDetectionConfidence: 0.65,
+    minTrackingConfidence: 0.65,
     ...options,
   });
 
   pose.onResults(onResults);
   return pose;
+}
+
+/**
+ * Exponential Moving Average Landmark Smoother
+ * Reduces frame-to-frame jitter while maintaining real-time responsiveness.
+ */
+export function smoothLandmarks(
+  current: NormalizedLandmark[],
+  previous: NormalizedLandmark[] | null,
+  alpha: number = 0.65
+): NormalizedLandmark[] {
+  if (!previous || previous.length !== current.length) {
+    return current;
+  }
+
+  return current.map((curr, idx) => {
+    const prev = previous[idx];
+    if (!prev) return curr;
+
+    const currVis = curr.visibility ?? 1;
+    const prevVis = prev.visibility ?? 1;
+
+    // Weight smoothing by visibility confidence
+    const effectiveAlpha = Math.min(1, alpha * (currVis >= 0.6 ? 1 : 0.5));
+
+    return {
+      x: prev.x + effectiveAlpha * (curr.x - prev.x),
+      y: prev.y + effectiveAlpha * (curr.y - prev.y),
+      z: prev.z !== undefined && curr.z !== undefined ? prev.z + effectiveAlpha * (curr.z - prev.z) : curr.z,
+      visibility: currVis * 0.7 + prevVis * 0.3,
+    };
+  });
+}
+
+/**
+ * Validates whether the athlete's body is properly framed in the camera view
+ */
+export interface FramingCheckResult {
+  isProperlyFramed: boolean;
+  message: string;
+  visibleJointCount: number;
+  confidence: number;
+}
+
+export function checkFramingAndVisibility(
+  landmarks: NormalizedLandmark[],
+  requiredJoints: number[] = [
+    PoseLandmark.LEFT_SHOULDER,
+    PoseLandmark.RIGHT_SHOULDER,
+    PoseLandmark.LEFT_HIP,
+    PoseLandmark.RIGHT_HIP,
+    PoseLandmark.LEFT_KNEE,
+    PoseLandmark.RIGHT_KNEE,
+  ]
+): FramingCheckResult {
+  if (!landmarks || landmarks.length === 0) {
+    return {
+      isProperlyFramed: false,
+      message: 'No athlete detected. Step into the camera frame.',
+      visibleJointCount: 0,
+      confidence: 0,
+    };
+  }
+
+  let visibleCount = 0;
+  let totalConfidence = 0;
+  let outOfBounds = false;
+
+  for (const jointIndex of requiredJoints) {
+    const lm = landmarks[jointIndex];
+    if (!lm) continue;
+
+    const vis = lm.visibility ?? 0;
+    totalConfidence += vis;
+
+    if (vis >= 0.6) {
+      visibleCount++;
+    }
+
+    if (lm.x < 0.03 || lm.x > 0.97 || lm.y < 0.03 || lm.y > 0.97) {
+      outOfBounds = true;
+    }
+  }
+
+  const avgConfidence = requiredJoints.length > 0 ? totalConfidence / requiredJoints.length : 0;
+  const isSufficientlyVisible = visibleCount >= Math.ceil(requiredJoints.length * 0.75);
+
+  if (outOfBounds) {
+    return {
+      isProperlyFramed: false,
+      message: 'Body too close to edge. Step back and center yourself.',
+      visibleJointCount: visibleCount,
+      confidence: avgConfidence,
+    };
+  }
+
+  if (!isSufficientlyVisible) {
+    return {
+      isProperlyFramed: false,
+      message: 'Ensure full body from shoulders to feet is visible.',
+      visibleJointCount: visibleCount,
+      confidence: avgConfidence,
+    };
+  }
+
+  return {
+    isProperlyFramed: true,
+    message: 'Good positioning. Ready for assessment.',
+    visibleJointCount: visibleCount,
+    confidence: avgConfidence,
+  };
 }
 
 /**
@@ -51,7 +163,7 @@ export function drawPoseSkeleton(
     lineColor = 'rgba(6, 182, 212, 0.75)',
     pointRadius = 4,
     lineWidth = 3,
-    minConfidence = 0.4,
+    minConfidence = 0.5,
   } = options;
 
   if (!landmarks || landmarks.length === 0) return;
@@ -158,4 +270,4 @@ export class PoseEngine {
       this.isInitialized = false;
     }
   }
-}
+}

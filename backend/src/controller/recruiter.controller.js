@@ -32,17 +32,17 @@ async function getCandidatesHandler(req, res) {
         const assessments = await Assessment.find({ userId: u._id }).lean();
         const hasAssessments = assessments.length > 0;
 
-        let overallScore = 86;
-        let avgSymmetry = 95;
-        let avgDepth = 91;
-        let avgCadence = 94;
-        let verifiedReps = 38;
+        let overallScore = 0;
+        let avgSymmetry = 0;
+        let avgDepth = 0;
+        let avgCadence = 0;
+        let verifiedReps = 0;
 
         if (hasAssessments) {
           const sumScore = assessments.reduce((acc, a) => acc + (a.totalScore || 0), 0);
-          const sumSym = assessments.reduce((acc, a) => acc + (a.symmetryScore || 90), 0);
-          const sumDepth = assessments.reduce((acc, a) => acc + (a.depthScore || 88), 0);
-          const sumCadence = assessments.reduce((acc, a) => acc + (a.cadenceScore || 85), 0);
+          const sumSym = assessments.reduce((acc, a) => acc + (a.symmetryScore || 85), 0);
+          const sumDepth = assessments.reduce((acc, a) => acc + (a.depthScore || 80), 0);
+          const sumCadence = assessments.reduce((acc, a) => acc + (a.cadenceScore || 80), 0);
           const sumReps = assessments.reduce((acc, a) => acc + (a.validReps || a.repsCompleted || 0), 0);
 
           overallScore = Math.round(sumScore / assessments.length);
@@ -53,21 +53,33 @@ async function getCandidatesHandler(req, res) {
         }
 
         const age = calculateAge(u.profile?.age);
-        const athleteSport = u.profile?.primarySport || 'Athletics & Track';
+        const athleteSport = u.profile?.primarySport || 'Basketball';
         const athleteState = u.profile?.state || 'Delhi';
-        const athleteDistrict = u.profile?.city || 'South Delhi';
+        const athleteDistrict = u.profile?.city || '';
         const athleteGender = u.profile?.gender || 'Male';
 
-        const speed = Math.min(99, Math.round(avgCadence * 0.95 + 5));
-        const agility = Math.min(99, Math.round(avgDepth * 0.94 + 6));
-        const strength = Math.min(99, Math.round(overallScore * 0.92 + 8));
-        const athleteTier = getTier(overallScore);
+        const speed = hasAssessments ? Math.min(99, Math.round(avgCadence * 0.95 + 5)) : 0;
+        const agility = hasAssessments ? Math.min(99, Math.round(avgDepth * 0.94 + 6)) : 0;
+        const strength = hasAssessments ? Math.min(99, Math.round(overallScore * 0.92 + 8)) : 0;
+        const athleteTier = hasAssessments ? getTier(overallScore) : 'UNASSESSED';
 
-        const idSuffix = u._id.toString().replace(/\D/g, '').padEnd(4, '8').slice(0, 4);
+        const idSuffix = u._id.toString().replace(/\D/g, '').padEnd(4, '8').slice(-4);
         const passportId = `IND-2026-${idSuffix}`;
 
-        const matchScore = Math.min(99, Math.round(85 + (overallScore - 70) * 0.45));
-        const aiInsight = `Verified athlete in ${athleteSport} from ${athleteState}. Demonstrates ${avgSymmetry}% bilateral kinematic symmetry and consistent depth compliance across ${assessments.length || 1} official sessions.`;
+        // Accurate match rationale
+        let matchScore = 0;
+        let aiInsight = '';
+
+        if (hasAssessments) {
+          matchScore = Math.min(99, Math.max(50, Math.round(70 + (overallScore - 60) * 0.7)));
+          aiInsight = `Athlete in ${athleteSport} from ${athleteState}. Demonstrates ${avgSymmetry}% bilateral symmetry and completed ${assessments.length} recorded assessments.`;
+        } else {
+          matchScore = 50;
+          aiInsight = `New athlete profile registered in ${athleteSport}. Awaiting baseline calibration.`;
+        }
+
+        // Contact info privacy check: only allowed if recruiter discoverability is not false and athlete profile allows contact
+        const contactAllowed = u.privacy?.recruiterDiscoverability !== false && u.privacy?.profileVisibility !== 'only_me';
 
         return {
           id: u._id.toString(),
@@ -77,6 +89,7 @@ async function getCandidatesHandler(req, res) {
           sport: athleteSport,
           state: athleteState,
           district: athleteDistrict,
+          email: contactAllowed ? u.email : undefined,
           overallScore,
           speed,
           agility,
@@ -87,7 +100,7 @@ async function getCandidatesHandler(req, res) {
           aiInsight,
           photo: u.profile?.profilePhoto || u.profile?.avatar,
           shortlisted: false,
-          contactAllowed: true,
+          contactAllowed,
           passportId,
           verifiedReps,
         };
@@ -101,6 +114,16 @@ async function getCandidatesHandler(req, res) {
       if (tier && tier !== 'ALL' && c.tier !== tier) return false;
       if (minScore && c.overallScore < Number(minScore)) return false;
       return true;
+    });
+
+    // Exact matches first (exact sport), closest matches second
+    result.sort((a, b) => {
+      if (sport && sport !== 'All Sports') {
+        const aExact = a.sport.toLowerCase() === sport.toLowerCase() ? 1 : 0;
+        const bExact = b.sport.toLowerCase() === sport.toLowerCase() ? 1 : 0;
+        if (aExact !== bExact) return bExact - aExact;
+      }
+      return b.overallScore - a.overallScore;
     });
 
     return res.status(200).json({

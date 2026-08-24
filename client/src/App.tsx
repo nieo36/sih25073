@@ -17,6 +17,7 @@ import { ResetPassword } from './pages/ResetPassword';
 import { VerifyEmail } from './pages/VerifyEmail';
 import { Dashboard } from './pages/Dashboard';
 import { Assessment } from './pages/Assessment';
+import { Calibration } from './pages/Calibration';
 import { Progress } from './pages/Progress';
 import { Leaderboard } from './pages/Leaderboard';
 import { RecruiterDashboard } from './pages/RecruiterDashboard';
@@ -36,12 +37,20 @@ export const App: React.FC = () => {
               {/* Default Redirect to Dashboard */}
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-              {/* Protected Assessment Route */}
+              {/* Protected Assessment & Calibration Routes */}
               <Route
                 path="/assessment"
                 element={
                   <ProtectedRoute>
                     <Assessment />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/calibration"
+                element={
+                  <ProtectedRoute>
+                    <Calibration />
                   </ProtectedRoute>
                 }
               />

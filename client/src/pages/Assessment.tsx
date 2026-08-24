@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { createPoseDetector, drawPoseSkeleton, Results, Pose } from '../mediapipe/pose';
+import { createPoseDetector, drawPoseSkeleton, smoothLandmarks, Results, Pose } from '../mediapipe/pose';
 
 // Existing analyzers
 import { SquatAnalyzer } from '../mediapipe/squat';
@@ -138,6 +138,7 @@ export const Assessment: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const poseRef = useRef<Pose | null>(null);
+  const prevLandmarksRef = useRef<any>(null);
   const animationFrameIdRef = useRef<number | null>(null);
   const landmarkSamplesRef = useRef<LandmarkSample[]>([]);
 
@@ -237,6 +238,7 @@ export const Assessment: React.FC = () => {
     weightliftingStabilityAnalyzerRef.current.reset();
     tempoAnalyzerRef.current.reset();
     liftingTechniqueAnalyzerRef.current.reset();
+    prevLandmarksRef.current = null;
     lastFeedbackRef.current = '';
     lastRepCountRef.current = 0;
   }, []);
@@ -283,17 +285,20 @@ export const Assessment: React.FC = () => {
       ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
     }
 
-    // 4. Draw pose skeleton
+    // 4. Draw pose skeleton with temporal landmark smoothing
     if (results.poseLandmarks && results.poseLandmarks.length > 0) {
-      drawPoseSkeleton(ctx, results.poseLandmarks, canvas.width, canvas.height, {
+      const smoothed = smoothLandmarks(results.poseLandmarks, prevLandmarksRef.current, 0.65);
+      prevLandmarksRef.current = smoothed;
+
+      drawPoseSkeleton(ctx, smoothed, canvas.width, canvas.height, {
         pointColor: '#ffcc00',
         lineColor: 'rgba(0, 85, 255, 0.85)',
         pointRadius: 6,
         lineWidth: 4,
-        minConfidence: 0.45,
+        minConfidence: 0.5,
       });
 
-      // 5. If assessment active, feed landmarks into the selected sport analyzer
+      // 5. If assessment active, feed smoothed landmarks into the selected sport analyzer
       if (isAssessingRef.current) {
         let currentJointAngle = 0;
         let isInflection = false;
@@ -303,7 +308,7 @@ export const Assessment: React.FC = () => {
         let avgForm = 85;
 
         const currentEx = exerciseRef.current;
-        const lms = results.poseLandmarks;
+        const lms = smoothed;
 
         switch (currentEx) {
           // 🏀 Basketball
@@ -943,15 +948,18 @@ export const Assessment: React.FC = () => {
 
         {/* Setup & Instructions Banner */}
         {!isAssessing && !completed && (
-          <div style={{
-            background: T.surfaceLowest,
-            border: T.border3,
-            boxShadow: T.shadow6,
-            padding: '1.25rem 1.5rem',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: '1.25rem',
-          }}>
+          <div
+            className="kreedai-instructions-banner"
+            style={{
+              background: T.surfaceLowest,
+              border: T.border3,
+              boxShadow: T.shadow6,
+              padding: '1.25rem 1.5rem',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: '1.25rem',
+            }}
+          >
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: T.primary, fontWeight: 900, fontFamily: T.fontHeadline, textTransform: 'uppercase', fontSize: '0.95rem' }}>
                 <CameraIcon size={18} color={T.tertiary} />
@@ -1003,15 +1011,25 @@ export const Assessment: React.FC = () => {
             gap: 1.25rem;
           }
           @media (max-width: 768px) {
-            .kreedai-assessment-grid {
+            .kreedai-assessment-wrapper {
               display: flex;
               flex-direction: column;
-              gap: 1rem;
+              gap: 0.75rem;
+              padding: 0.75rem !important;
+            }
+            .kreedai-instructions-banner {
+              order: 3;
+            }
+            .kreedai-assessment-grid {
+              order: 2;
+              display: flex;
+              flex-direction: column;
+              gap: 0.75rem;
             }
             .kreedai-camera-frame {
               aspect-ratio: auto;
-              height: clamp(480px, 72vh, 640px);
-              border-radius: 4px;
+              height: clamp(340px, 52vh, 480px);
+              border-radius: 2px;
             }
             .kreedai-hud-mobile-overlays {
               display: flex;
@@ -1019,7 +1037,7 @@ export const Assessment: React.FC = () => {
               justify-content: space-between;
               position: absolute;
               inset: 0;
-              padding: 0.75rem;
+              padding: 0.65rem;
               pointer-events: none;
               z-index: 10;
             }

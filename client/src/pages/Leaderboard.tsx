@@ -32,7 +32,8 @@ import {
   STATES,
   SPORTS,
   AGE_GROUPS,
-  MOCK_MY_POSITION,
+  MyPosition,
+  fetchMyPosition,
   Tier,
   VerificationStatus,
 } from '../services/leaderboardService';
@@ -307,7 +308,7 @@ export const Leaderboard: React.FC = () => {
   const [allAthletes, setAllAthletes] = useState<LeaderboardAthlete[]>([]);
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
-  const myPosition = MOCK_MY_POSITION;
+  const [myPosition, setMyPosition] = useState<MyPosition | null>(null);
 
   const [filters, setFilters] = useState<LeaderboardFilters>({
     search: '', state: 'All States', sport: 'All Sports',
@@ -320,6 +321,9 @@ export const Leaderboard: React.FC = () => {
     setLoading(true);
     fetchLeaderboard().then((data) => {
       if (!cancelled) { setAllAthletes(data); setLoading(false); }
+    });
+    fetchMyPosition().then((pos) => {
+      if (!cancelled) { setMyPosition(pos); }
     });
     return () => { cancelled = true; };
   }, []);
@@ -349,10 +353,10 @@ export const Leaderboard: React.FC = () => {
     filters.ageGroup !== 'All' || filters.gender !== 'All' || filters.verificationStatus !== 'All' || !!filters.search;
 
   const statsCards = [
-    { label: 'National Rank', value: `#${myPosition.nationalRank.toLocaleString()}`, icon: Trophy, bg: T.primaryContainer },
-    { label: 'State Rank',    value: `#${myPosition.stateRank}`,                    icon: MapPin,  bg: '#dbeafe' },
-    { label: 'Sport Rank',    value: `#${myPosition.sportRank}`,                    icon: Star,    bg: '#f3e8ff' },
-    { label: 'Percentile',    value: `${myPosition.percentile}th`,                  icon: BarChart3, bg: '#dcfce7' },
+    { label: 'National Rank', value: myPosition ? `#${myPosition.nationalRank.toLocaleString()}` : 'Unranked', icon: Trophy, bg: T.primaryContainer },
+    { label: 'State Rank',    value: myPosition ? `#${myPosition.stateRank}` : '-',                    icon: MapPin,  bg: '#dbeafe' },
+    { label: 'Sport Rank',    value: myPosition ? `#${myPosition.sportRank}` : '-',                    icon: Star,    bg: '#f3e8ff' },
+    { label: 'Percentile',    value: myPosition ? `${myPosition.percentile}th` : '-',                  icon: BarChart3, bg: '#dcfce7' },
   ];
 
   return (
@@ -401,7 +405,9 @@ export const Leaderboard: React.FC = () => {
             </h1>
             <p style={{ fontSize: '0.9rem', fontWeight: 500, color: '#4a4a4a', maxWidth: '540px' }}>
               {t('lb.subtitle', 'Rankings verified via computer vision biomechanical analysis for SAI talent scouts.')}{' '}
-              <strong>{myPosition.totalAthletes.toLocaleString()}</strong> athletes competing nationally.
+              {myPosition?.totalAthletes ? (
+                <span><strong>{myPosition.totalAthletes.toLocaleString()}</strong> athletes competing nationally.</span>
+              ) : null}
             </p>
           </div>
 
@@ -437,30 +443,49 @@ export const Leaderboard: React.FC = () => {
                 fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: '0.85rem',
                 border: '2px solid rgba(255,255,255,0.2)', flexShrink: 0,
               }}>
-                {user?.name ? user.name.charAt(0).toUpperCase() : 'YU'}
+                {user?.name ? user.name.charAt(0).toUpperCase() : 'A'}
               </div>
               <div>
                 <div style={{ fontSize: '0.65rem', fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#ffcc00', marginBottom: '2px' }}>
                   Your Position
                 </div>
                 <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: '1.15rem', textTransform: 'uppercase', lineHeight: 1 }}>
-                  {user?.name || 'Athlete'} · #{myPosition.nationalRank.toLocaleString()} Nationally
+                  {user?.name || 'Athlete'} · {myPosition?.nationalRank ? `#${myPosition.nationalRank.toLocaleString()} Nationally` : 'Unranked (Pending Calibration)'}
                 </div>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-              {[
-                ['State', `#${myPosition.stateRank}`],
-                ['Sport', `#${myPosition.sportRank}`],
-                ['Age Group', `#${myPosition.ageGroupRank}`],
-                ['Percentile', `${myPosition.percentile}th`],
-              ].map(([lbl, val]) => (
-                <div key={lbl} style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'rgba(255,255,255,0.55)', fontFamily: "'Space Grotesk',sans-serif" }}>{lbl}</div>
-                  <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: '1.1rem', color: '#ffcc00' }}>{val}</div>
-                </div>
-              ))}
-            </div>
+            {myPosition ? (
+              <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                {[
+                  ['State', `#${myPosition.stateRank}`],
+                  ['Sport', `#${myPosition.sportRank}`],
+                  ['Age Group', `#${myPosition.ageGroupRank}`],
+                  ['Percentile', `${myPosition.percentile}th`],
+                ].map(([lbl, val]) => (
+                  <div key={lbl} style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'rgba(255,255,255,0.55)', fontFamily: "'Space Grotesk',sans-serif" }}>{lbl}</div>
+                    <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: '1.1rem', color: '#ffcc00' }}>{val}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <a
+                href="/calibration"
+                style={{
+                  background: '#ffcc00',
+                  color: '#1a1a1a',
+                  border: '2px solid #ffffff',
+                  padding: '0.4rem 0.85rem',
+                  fontFamily: "'Space Grotesk',sans-serif",
+                  fontWeight: 800,
+                  fontSize: '0.8rem',
+                  textTransform: 'uppercase',
+                  textDecoration: 'none',
+                }}
+              >
+                Calibrate to Rank &rarr;
+              </a>
+            )}
           </div>
 
           {/* Metric Tabs */}
@@ -667,7 +692,7 @@ export const Leaderboard: React.FC = () => {
                   </div>
                   <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: '2rem', lineHeight: 1, letterSpacing: '-0.03em' }}>{value}</div>
                   <div style={{ fontSize: '0.7rem', fontWeight: 600, color: '#4a4a4a', marginTop: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                    of {myPosition.totalAthletes.toLocaleString()} athletes
+                    {myPosition?.totalAthletes ? `of ${myPosition.totalAthletes.toLocaleString()} athletes` : 'National Pool'}
                   </div>
                 </div>
               ))}
